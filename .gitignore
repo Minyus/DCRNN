@@ -105,3 +105,4 @@ ENV/
 # data
 *.h5
 *.npz
+*.csv

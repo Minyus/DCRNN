@@ -7,7 +7,7 @@ import argparse
 import numpy as np
 import os
 import pandas as pd
-
+from pathlib import Path
 
 def generate_graph_seq2seq_io_data(
         df, x_offsets, y_offsets, add_time_in_day=True, add_day_in_week=False, scaler=None
@@ -54,7 +54,13 @@ def generate_graph_seq2seq_io_data(
 
 
 def generate_train_val_test(args):
-    df = pd.read_hdf(args.traffic_df_filename)
+    traffic_df_path = Path(args.traffic_df_filename)
+    if traffic_df_path.suffix in ['.h5', '.hdf5']:
+        df = pd.read_hdf(args.traffic_df_filename)
+        df.to_csv(traffic_df_path.with_suffix('.csv').__str__(), sep=',')
+    else:
+        df = pd.read_csv(args.traffic_df_filename)
+
     # 0 is the latest observed sample.
     x_offsets = np.sort(
         # np.concatenate(([-week_size + 1, -day_size + 1], np.arange(-11, 1, 1)))
@@ -110,14 +116,9 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--output_dir", type=str, default="data/METR-LA", help="Output directory."
-    )
-    parser.add_argument(
-        "--traffic_df_filename",
-        type=str,
-        default="data/metr-la.h5",
-        help="Raw traffic readings.",
-    )
+    parser.add_argument("--output_dir", type=str, default="data/METR-LA",
+                        help="Output directory.",)
+    parser.add_argument("--traffic_df_filename", type=str, default="data/metr-la.h5",
+                        help="Raw traffic readings.",)
     args = parser.parse_args()
     main(args)
