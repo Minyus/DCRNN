@@ -28,7 +28,8 @@ def generate_graph_seq2seq_io_data(
     data = np.expand_dims(df.values, axis=-1)
     data_list = [data]
     if add_time_in_day:
-        time_ind = (df.index.values - df.index.values.astype("datetime64[D]")) / np.timedelta64(1, "D")
+        time_ind = (df.index.values - \
+                    df.index.values.astype("datetime64[D]")) / np.timedelta64(1, "D")
         time_in_day = np.tile(time_ind, [1, num_nodes, 1]).transpose((2, 1, 0))
         data_list.append(time_in_day)
     if add_day_in_week:
@@ -37,16 +38,20 @@ def generate_graph_seq2seq_io_data(
         data_list.append(day_in_week)
 
     data = np.concatenate(data_list, axis=-1)
-    # epoch_len = num_samples + min(x_offsets) - max(y_offsets)
-    x, y = [], []
+
     # t is the index of the last observation.
     min_t = abs(min(x_offsets))
     max_t = abs(num_samples - abs(max(y_offsets)))  # Exclusive
-    for t in range(min_t, max_t):
-        x_t = data[t + x_offsets, ...]
-        y_t = data[t + y_offsets, ...]
-        x.append(x_t)
-        y.append(y_t)
+
+    # x, y = [], []
+    # for t in range(min_t, max_t):
+    #     x_t = data[t + x_offsets, ...]
+    #     y_t = data[t + y_offsets, ...]
+    #     x.append(x_t)
+    #     y.append(y_t)
+    x = [data[t + x_offsets, ...] for t in range(min_t, max_t)]
+    y = [data[t + y_offsets, ...] for t in range(min_t, max_t)]
+
     x = np.stack(x, axis=0)
     y = np.stack(y, axis=0)
     return x, y
