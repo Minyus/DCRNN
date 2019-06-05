@@ -92,9 +92,15 @@ def generate_train_val_test(args):
     # num_test = 6831, using the last 6831 examples as testing.
     # for the rest: 7/8 is used for training, and 1/8 is used for validation.
     num_samples = x.shape[0]
-    num_test = round(num_samples * 0.2)
-    num_train = round(num_samples * 0.7)
-    num_val = num_samples - num_test - num_train
+    # num_test = round(num_samples * 0.2)
+    # num_train = round(num_samples * 0.7)
+    # num_val = num_samples - num_test - num_train
+    assert args.test_timesteps >= 0
+    assert args.validation_timesteps >= 0
+    num_test = args.test_timesteps if args.test_timesteps <= num_samples else num_samples
+    num_val = args.validation_timesteps if \
+        (args.test_timesteps + args.validation_timesteps) <= num_samples else 0
+    num_train = num_samples - num_test - num_val
 
     # train
     x_train, y_train = x[:num_train], y[:num_train]
@@ -133,5 +139,11 @@ if __name__ == "__main__":
                         help="timesteps to use as model input.",)
     parser.add_argument("--future_timesteps", type=int, default=12,
                         help="timesteps to predict by the model.",)
+    # parser.add_argument("--phase", type=str, default='train_validation_test',
+    #                     help="train_validation_test, train_validation, or 'test'",)
+    parser.add_argument("--test_timesteps", type=int, default=6850,
+                        help="timesteps for test",)
+    parser.add_argument("--validation_timesteps", type=int, default=3425,
+                        help="timesteps for validation",)
     args = parser.parse_args()
     main(args)
