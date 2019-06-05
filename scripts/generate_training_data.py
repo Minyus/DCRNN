@@ -86,8 +86,7 @@ def generate_train_val_test(args):
         add_time_in_day=True,
         add_day_in_week=False,
     )
-
-    print("x shape: ", x.shape, ", y shape: ", y.shape)
+    print("history (model_input): ", x.shape, " | future (model_output): ", y.shape)
     # Write the data into npz file.
     # num_test = 6831, using the last 6831 examples as testing.
     # for the rest: 7/8 is used for training, and 1/8 is used for validation.
@@ -102,19 +101,23 @@ def generate_train_val_test(args):
         (args.test_timesteps + args.validation_timesteps) <= num_samples else 0
     num_train = num_samples - num_test - num_val
 
-    # train
-    x_train, y_train = x[:num_train], y[:num_train]
+    # test
+    x_test, y_test = x[-num_test:], y[-num_test:]
+
     # val
     x_val, y_val = (
         x[num_train: num_train + num_val],
         y[num_train: num_train + num_val],
-    )
-    # test
-    x_test, y_test = x[-num_test:], y[-num_test:]
+        ) if num_val > 0 else (x_test, y_test)
+
+    # train
+    x_train, y_train = x[:num_train], y[:num_train]
+
+
 
     for cat in ["train", "val", "test"]:
         _x, _y = locals()["x_" + cat], locals()["y_" + cat]
-        print(cat, "x: ", _x.shape, "y:", _y.shape)
+        print(cat, " >> history (model_input):", _x.shape, " | future (model_output): ", _y.shape)
         np.savez_compressed(
             os.path.join(args.output_dir, "%s.npz" % cat),
             x=_x,
@@ -125,7 +128,9 @@ def generate_train_val_test(args):
 
 
 def main(args):
-    print("Generating training data")
+    print("Converting data \n"
+          "from 2d of (epoch_timesteps, num_nodes) \n"
+          "to 4d of (epoch_timesteps, model_timesteps, num_nodes, dimension).")
     generate_train_val_test(args)
 
 
@@ -142,8 +147,9 @@ if __name__ == "__main__":
     # parser.add_argument("--phase", type=str, default='train_validation_test',
     #                     help="train_validation_test, train_validation, or 'test'",)
     parser.add_argument("--test_timesteps", type=int, default=6850,
-                        help="timesteps for test",)
+                        help="timesteps for test.",)
     parser.add_argument("--validation_timesteps", type=int, default=3425,
-                        help="timesteps for validation",)
+                        help="timesteps for validation. "
+                             "if 0, test dataset is used as validation.",)
     args = parser.parse_args()
     main(args)
