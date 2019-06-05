@@ -10,8 +10,8 @@ import pandas as pd
 from pathlib import Path
 
 def generate_graph_seq2seq_io_data(
-        df, x_offsets, y_offsets, add_time_in_day=True, add_day_in_week=False, scaler=None
-):
+        df, x_offsets, y_offsets, add_time_in_day=True, add_day_in_week=False,
+        ):
     """
     Generate samples from
     :param df:
@@ -19,7 +19,6 @@ def generate_graph_seq2seq_io_data(
     :param y_offsets:
     :param add_time_in_day:
     :param add_day_in_week:
-    :param scaler:
     :return:
     # x: (epoch_size, input_length, num_nodes, input_dim)
     # y: (epoch_size, output_length, num_nodes, output_dim)
@@ -57,17 +56,22 @@ def generate_train_val_test(args):
     traffic_df_path = Path(args.traffic_df_filename)
     if traffic_df_path.suffix in ['.h5', '.hdf5']:
         df = pd.read_hdf(args.traffic_df_filename)
-        df.to_csv(traffic_df_path.with_suffix('.csv').__str__(), sep=',')
+        df.index.name = 'timestamp'
+        if not traffic_df_path.with_suffix('.csv').exists():
+            df.to_csv(traffic_df_path.with_suffix('.csv').__str__(), sep=',')
     else:
-        df = pd.read_csv(args.traffic_df_filename)
+        df = pd.read_csv(args.traffic_df_filename, index_col=0, parse_dates=[0])
+
 
     # 0 is the latest observed sample.
-    x_offsets = np.sort(
-        # np.concatenate(([-week_size + 1, -day_size + 1], np.arange(-11, 1, 1)))
-        np.concatenate((np.arange(-11, 1, 1),))
-    )
+    # x_offsets = np.sort(
+    #     # np.concatenate(([-week_size + 1, -day_size + 1], np.arange(-11, 1, 1)))
+    #     np.concatenate((np.arange(-args.history_timesteps + 1, 1, 1),))
+    # )
+    x_offsets = np.arange(-args.history_timesteps + 1, 1, 1)
     # Predict the next one hour
-    y_offsets = np.sort(np.arange(1, 13, 1))
+    # y_offsets = np.sort(np.arange(1, args.future_timesteps + 1, 1))
+    y_offsets = np.arange(1, args.future_timesteps + 1, 1)
     # x: (num_samples, input_length, num_nodes, input_dim)
     # y: (num_samples, output_length, num_nodes, output_dim)
     x, y = generate_graph_seq2seq_io_data(
@@ -118,7 +122,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output_dir", type=str, default="data/METR-LA",
                         help="Output directory.",)
-    parser.add_argument("--traffic_df_filename", type=str, default="data/metr-la.h5",
+    parser.add_argument("--traffic_df_filename", type=str, default="data/metr-la.csv",
                         help="Raw traffic readings.",)
+    parser.add_argument("--history_timesteps", type=int, default=12,
+                        help="timesteps to use as model input.",)
+    parser.add_argument("--future_timesteps", type=int, default=12,
+                        help="timesteps to predict by the model.",)
     args = parser.parse_args()
     main(args)
