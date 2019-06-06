@@ -179,9 +179,11 @@ def generate_train_val_test(args):
         )
 
 def train_dcrnn(args):
+    tf.reset_default_graph()
     with open(args.config_filename) as f:
         supervisor_config = yaml.load(f)
-
+        supervisor_config['train']['log_dir'] = args.model_dir
+        supervisor_config['data']['graph_pkl_filename'] = args.graph_pkl_filename
         # graph_pkl_filename = supervisor_config['data'].get('graph_pkl_filename')
         graph_pkl_filename = args.graph_pkl_filename
         sensor_ids, sensor_id_to_ind, adj_mx = load_graph_data(graph_pkl_filename)
@@ -204,6 +206,7 @@ def get_model_filename(dir):
 
 
 def run_dcrnn(args):
+    tf.reset_default_graph()
     with open(args.config_filename) as f:
         config = yaml.load(f)
     tf_config = tf.ConfigProto()
@@ -237,7 +240,7 @@ def main(args):
 if __name__ == "__main__":
     sys.path.append(os.getcwd())
     parser = argparse.ArgumentParser()
-    parser.add_argument("--test_only", type=bool, default=True,
+    parser.add_argument("--test_only", type=bool, default=False,
                         help="Skip training",)
 
     parser.add_argument("--traffic_df_filename", type=str, default="metr-la_data/metr-la.csv",
@@ -279,7 +282,7 @@ if __name__ == "__main__":
 
 
     # parser.add_argument('--use_cpu_only', default=False, type=str, help='Whether to run tensorflow on cpu.')
-    parser.add_argument('--config_filename', default='data/model/pretrained/METR-LA/config.yaml', type=str,
+    parser.add_argument('--config_filename', default='metr-la_data/config.yaml', type=str,
                         help='Config file for pretrained model.')
     parser.add_argument('--output_filename', default='data/dcrnn_predictions.npz')
 

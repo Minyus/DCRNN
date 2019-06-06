@@ -306,11 +306,12 @@ class DCRNNSupervisor(object):
     def save(self, sess, val_loss):
         config = dict(self._kwargs)
         global_step = np.asscalar(sess.run(tf.train.get_or_create_global_step()))
-        prefix = os.path.join(self._log_dir, 'models-{:.4f}'.format(val_loss))
+        prefix = os.path.join(self._log_dir, 'model-{:08.4f}'.format(val_loss))
         config['train']['epoch'] = self._epoch
         config['train']['global_step'] = global_step
         config['train']['log_dir'] = self._log_dir
-        config['train']['model_filename'] = self._saver.save(sess, prefix, global_step=global_step,
+        config['train']['model_filename'] = self._saver.save(sess, prefix,
+                                                             global_step=global_step,
                                                              write_meta_graph=False)
         config_filename = 'config_{}.yaml'.format(self._epoch)
         with open(os.path.join(self._log_dir, config_filename), 'w') as f:
