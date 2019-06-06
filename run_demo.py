@@ -24,6 +24,15 @@ from model.dcrnn_supervisor import DCRNNSupervisor
 
 
 
+
+import argparse
+import tensorflow as tf
+import yaml
+
+from lib.utils import load_graph_data
+from model.dcrnn_supervisor import DCRNNSupervisor
+
+
 def generate_graph_seq2seq_io_data(
         df, x_offsets, y_offsets, add_time_in_day=True, add_day_in_week=False,
         ):
@@ -169,6 +178,22 @@ def generate_train_val_test(args):
             y_offsets=y_offsets.reshape(list(y_offsets.shape) + [1]),
         )
 
+def train_dcrnn(args):
+    with open(args.config_filename) as f:
+        supervisor_config = yaml.load(f)
+
+        graph_pkl_filename = supervisor_config['data'].get('graph_pkl_filename')
+        sensor_ids, sensor_id_to_ind, adj_mx = load_graph_data(graph_pkl_filename)
+
+        tf_config = tf.ConfigProto()
+        if args.use_cpu_only:
+            tf_config = tf.ConfigProto(device_count={'GPU': 0})
+        tf_config.gpu_options.allow_growth = True
+        with tf.Session(config=tf_config) as sess:
+            supervisor = DCRNNSupervisor(adj_mx=adj_mx, **supervisor_config)
+
+            supervisor.train(sess=sess)
+
 
 def run_dcrnn(args):
     with open(args.config_filename) as f:
@@ -194,11 +219,15 @@ def run_dcrnn(args):
 
 def main(args):
     generate_train_val_test(args)
+    if not args.test_only:
+        train_dcrnn(args)
     run_dcrnn(args)
 
 if __name__ == "__main__":
     sys.path.append(os.getcwd())
     parser = argparse.ArgumentParser()
+    parser.add_argument("--test_only", type=bool, default=False,
+                        help="Skip training",)
     parser.add_argument("--output_dir", type=str, default="data/METR-LA",
                         help="Output directory.",)
     parser.add_argument("--traffic_df_filename", type=str, default="data/metr-la.csv",
@@ -207,8 +236,7 @@ if __name__ == "__main__":
                         help="timesteps to use as model input.",)
     parser.add_argument("--future_timesteps", type=int, default=12,
                         help="timesteps to predict by the model.",)
-    # parser.add_argument("--phase", type=str, default='train_validation_test',
-    #                     help="train_validation_test, train_validation, or 'test'",)
+
     parser.add_argument("--test_timesteps", type=int, default=12,
                         help="timesteps for test.",)
     parser.add_argument("--validation_timesteps", type=int, default=0,
@@ -227,7 +255,12 @@ if __name__ == "__main__":
                         help="day, hour, minute of the latest datetime in "
                              " dd_hh_mm format e.g. 50_18_15 ",)
 
-    parser.add_argument('--use_cpu_only', default=False, type=str, help='Whether to run tensorflow on cpu.')
+    # parser.add_argument('--config_filename', default=None, type=str,
+    #                     help='Configuration filename for restoring the model.')
+    parser.add_argument('--use_cpu_only', default=False, type=bool, help='Set to true to only use cpu.')
+
+
+    # parser.add_argument('--use_cpu_only', default=False, type=str, help='Whether to run tensorflow on cpu.')
     parser.add_argument('--config_filename', default='data/model/pretrained/METR-LA/config.yaml', type=str,
                         help='Config file for pretrained model.')
     parser.add_argument('--output_filename', default='data/dcrnn_predictions.npz')
@@ -236,6 +269,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     main(args)
+
+
 
 
 
