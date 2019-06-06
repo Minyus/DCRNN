@@ -188,7 +188,7 @@ if __name__ == "__main__":
     parser.add_argument("--timestamp_latest", type=str, default=None,
                         help="The timestamp of the latest datetime in "
                              "%Y-%m-%dT%H:%M:%S format e.g. '1970-02-15T18:00:00' ",)
-    parser.add_argument("--day_hour_min_latest", type=str, default='50_18_55',
+    parser.add_argument("--day_hour_min_latest", type=str, default='30_18_55',
                         help="day, hour, minute of the latest datetime in "
                              " dd_hh_mm format e.g. 50_18_15 ",)
     args = parser.parse_args()
