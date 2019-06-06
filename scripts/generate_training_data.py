@@ -4,10 +4,13 @@ from __future__ import print_function
 from __future__ import unicode_literals
 
 import argparse
+from datetime import datetime
+
 import numpy as np
 import os
 import pandas as pd
 from pathlib import Path
+
 
 def generate_graph_seq2seq_io_data(
         df, x_offsets, y_offsets, add_time_in_day=True, add_day_in_week=False,
@@ -28,8 +31,8 @@ def generate_graph_seq2seq_io_data(
     data = np.expand_dims(df.values, axis=-1)
     data_list = [data]
     if add_time_in_day:
-        time_ind = (df.index.values - \
-                    df.index.values.astype("datetime64[D]")) / np.timedelta64(1, "D")
+        time_ind = (df.index.values - df.index.values.astype("datetime64[D]")) /\
+                   np.timedelta64(1, "D")
         time_in_day = np.tile(time_ind, [1, num_nodes, 1]).transpose((2, 1, 0))
         data_list.append(time_in_day)
     if add_day_in_week:
@@ -73,6 +76,22 @@ def generate_train_val_test(args):
             df = df.set_index('timestamp')
         else:
             df = pd.read_csv(args.traffic_df_filename, index_col=0, parse_dates=[0], sep=sep)
+
+    timestep_size = pd.Timedelta(args.timestep_size_in_min, unit='m')
+
+    if args.timestamp_latest:
+        print('Exclude future samples after future_timesteps since timestamp_latest is specified as: \n',
+              args.timestamp_latest)
+        args.datetime_latest = datetime.strptime(args.timestamp_latest, "%Y-%m-%dT%H:%M:%S")
+        df = df.loc[:(args.datetime_latest + args.future_timesteps * timestep_size)] # Note: .loc is inclusive
+
+    # Keep timestamp info to output final prediction table
+    args.datetime_max = df.index.values[-1]
+    print('The maximum of datetime: ', args.datetime_max)
+    args.datetime_latest = args.datetime_max - \
+                            args.future_timesteps * timestep_size
+
+    args.datetime_test_init = args.datetime_latest + timestep_size
 
     x_offsets = np.arange(-args.history_timesteps + 1, 1, 1)
     y_offsets = np.arange(1, args.future_timesteps + 1, 1)
@@ -129,8 +148,7 @@ def generate_train_val_test(args):
 
 
 def main(args):
-    print("Converting data \n"
-          "from 2d of (epoch_timesteps, num_nodes) \n"
+    print("Converting data from 2d of (epoch_timesteps, num_nodes) \n"
           "to 4d of (epoch_timesteps, model_timesteps, num_nodes, dimension).")
     generate_train_val_test(args)
 
@@ -158,5 +176,8 @@ if __name__ == "__main__":
                         help="Add day in week to the model input dimensions.",)
     parser.add_argument("--timestep_size_in_min", type=int, default=5,
                         help="Specify the timestep size in minutes.",)
+    parser.add_argument("--timestamp_latest", type=str, default='1970-02-15T18:00:00',
+                        help="The timestamp of the latest datetime in "
+                             "%Y-%m-%dT%H:%M:%S format e.g. '1970-02-15T18:00:00' ",)
     args = parser.parse_args()
     main(args)

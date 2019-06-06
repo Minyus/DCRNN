@@ -106,3 +106,4 @@ ENV/
 *.h5
 *.npz
 *.csv
+scratch.py
