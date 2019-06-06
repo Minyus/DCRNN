@@ -65,26 +65,27 @@ def generate_train_val_test(args):
         if not traffic_df_path.with_suffix('.csv').exists():
             df.to_csv(traffic_df_path.with_suffix('.csv').__str__(), sep=',')
     else:
-        df = pd.read_csv(args.traffic_df_filename, index_col=0, parse_dates=[0])
+        sep = ',' if traffic_df_path.suffix in ['.csv'] else ' '
+        if args.timestep_size_in_min > 0:
+            freq = '{}min'.format(args.timestep_size_in_min)
+            df = pd.read_csv(args.traffic_df_filename, index_col=False, sep=sep)
+            df['timestamp'] = pd.date_range(start='1970-01-01', periods=df.shape[0], freq=freq)
+            df = df.set_index('timestamp')
+        else:
+            df = pd.read_csv(args.traffic_df_filename, index_col=0, parse_dates=[0], sep=sep)
 
-
-    # 0 is the latest observed sample.
-    # x_offsets = np.sort(
-    #     # np.concatenate(([-week_size + 1, -day_size + 1], np.arange(-11, 1, 1)))
-    #     np.concatenate((np.arange(-args.history_timesteps + 1, 1, 1),))
-    # )
     x_offsets = np.arange(-args.history_timesteps + 1, 1, 1)
-    # Predict the next one hour
-    # y_offsets = np.sort(np.arange(1, args.future_timesteps + 1, 1))
     y_offsets = np.arange(1, args.future_timesteps + 1, 1)
+
     # x: (num_samples, input_length, num_nodes, input_dim)
     # y: (num_samples, output_length, num_nodes, output_dim)
+
     x, y = generate_graph_seq2seq_io_data(
         df,
         x_offsets=x_offsets,
         y_offsets=y_offsets,
-        add_time_in_day=True,
-        add_day_in_week=False,
+        add_time_in_day=args.add_time_in_day,
+        add_day_in_week=args.add_day_in_week,
     )
     print("history (model_input): ", x.shape, " | future (model_output): ", y.shape)
     # Write the data into npz file.
@@ -151,5 +152,11 @@ if __name__ == "__main__":
     parser.add_argument("--validation_timesteps", type=int, default=3425,
                         help="timesteps for validation. "
                              "if 0, test dataset is used as validation.",)
+    parser.add_argument("--add_time_in_day", type=bool, default=True,
+                        help="Add time in day to the model input dimensions.",)
+    parser.add_argument("--add_day_in_week", type=bool, default=False,
+                        help="Add day in week to the model input dimensions.",)
+    parser.add_argument("--timestep_size_in_min", type=int, default=5,
+                        help="Specify the timestep size in minutes.",)
     args = parser.parse_args()
     main(args)
