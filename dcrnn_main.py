@@ -182,7 +182,8 @@ def train_dcrnn(args):
     with open(args.config_filename) as f:
         supervisor_config = yaml.load(f)
 
-        graph_pkl_filename = supervisor_config['data'].get('graph_pkl_filename')
+        # graph_pkl_filename = supervisor_config['data'].get('graph_pkl_filename')
+        graph_pkl_filename = args.graph_pkl_filename
         sensor_ids, sensor_id_to_ind, adj_mx = load_graph_data(graph_pkl_filename)
 
         tf_config = tf.ConfigProto()
@@ -194,6 +195,13 @@ def train_dcrnn(args):
 
             supervisor.train(sess=sess)
 
+def get_model_filename(dir):
+    path_list = list(Path(dir).glob('*.index'))
+    serial = max([int(p.stem.split('-')[-1]) for p in path_list]).__str__()
+    path = list(Path(dir).glob('*' + serial + '.index'))[0]
+    model_filename = (path.parent / path.stem).as_posix()
+    return model_filename
+
 
 def run_dcrnn(args):
     with open(args.config_filename) as f:
@@ -202,11 +210,14 @@ def run_dcrnn(args):
     if args.use_cpu_only:
         tf_config = tf.ConfigProto(device_count={'GPU': 0})
     tf_config.gpu_options.allow_growth = True
-    graph_pkl_filename = config['data']['graph_pkl_filename']
+    # graph_pkl_filename = config['data']['graph_pkl_filename']
+    graph_pkl_filename = args.graph_pkl_filename
     _, _, adj_mx = load_graph_data(graph_pkl_filename)
     with tf.Session(config=tf_config) as sess:
         supervisor = DCRNNSupervisor(adj_mx=adj_mx, **config)
-        supervisor.load(sess, config['train']['model_filename'])
+        # supervisor.load(sess, config['train']['model_filename'])
+        model_filename = get_model_filename(args.model_dir)
+        supervisor.load(sess, model_filename)
         outputs = supervisor.evaluate(sess)
         np.savez_compressed(args.output_filename, **outputs)
         print('Predictions saved as {}.'.format(args.output_filename))
@@ -226,12 +237,19 @@ def main(args):
 if __name__ == "__main__":
     sys.path.append(os.getcwd())
     parser = argparse.ArgumentParser()
-    parser.add_argument("--test_only", type=bool, default=False,
+    parser.add_argument("--test_only", type=bool, default=True,
                         help="Skip training",)
+
+    parser.add_argument("--traffic_df_filename", type=str, default="metr-la_data/metr-la.csv",
+                        help="Raw traffic readings.",)
+    parser.add_argument("--graph_pkl_filename", type=str, default="metr-la_data/adj_mx.pkl",
+                        help="Graph adjacency matrix.",)
+    parser.add_argument("--model_dir", type=str, default="metr-la_data/model",
+                        help="model directory.",)
+
     parser.add_argument("--output_dir", type=str, default="data/METR-LA",
                         help="Output directory.",)
-    parser.add_argument("--traffic_df_filename", type=str, default="data/metr-la.csv",
-                        help="Raw traffic readings.",)
+
     parser.add_argument("--history_timesteps", type=int, default=12,
                         help="timesteps to use as model input.",)
     parser.add_argument("--future_timesteps", type=int, default=12,
