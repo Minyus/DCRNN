@@ -33,32 +33,29 @@ from lib.utils import load_graph_data
 from model.dcrnn_supervisor import DCRNNSupervisor
 
 
-def generate_graph_seq2seq_io_data(
-        df, x_offsets, y_offsets, add_time_in_day=True, add_day_in_week=False,
-        ):
-    """
-    Generate samples from
-    :param df:
-    :param x_offsets:
-    :param y_offsets:
-    :param add_time_in_day:
-    :param add_day_in_week:
-    :return:
-    # x: (epoch_size, input_length, num_nodes, input_dim)
-    # y: (epoch_size, output_length, num_nodes, output_dim)
-    """
+def generate_graph_seq2seq_io_data(arr2d,
+                                   history_timesteps,
+                                   future_timesteps,
+                                   time_in_day_arr1d,
+                                   day_of_week_arr1d,
+                                   add_time_in_day,
+                                   add_day_in_week,
+                                   test_timesteps,
+                                   validation_timesteps
+                                   ):
 
-    num_samples, num_nodes = df.shape
-    data = np.expand_dims(df.values, axis=-1)
+    x_offsets = np.arange(-history_timesteps + 1, 1, 1)
+    y_offsets = np.arange(1, future_timesteps + 1, 1)
+
+    num_samples, num_nodes = arr2d.shape
+    data = np.expand_dims(arr2d, axis=-1)
     data_list = [data]
     if add_time_in_day:
-        time_ind = (df.index.values - df.index.values.astype("datetime64[D]")) /\
-                   np.timedelta64(1, "D")
-        time_in_day = np.tile(time_ind, [1, num_nodes, 1]).transpose((2, 1, 0))
+        time_in_day = np.tile(time_in_day_arr1d, [1, num_nodes, 1]).transpose((2, 1, 0))
         data_list.append(time_in_day)
     if add_day_in_week:
         day_in_week = np.zeros(shape=(num_samples, num_nodes, 7))
-        day_in_week[np.arange(num_samples), :, df.index.dayofweek] = 1
+        day_in_week[np.arange(num_samples), :, day_of_week_arr1d] = 1
         data_list.append(day_in_week)
 
     data = np.concatenate(data_list, axis=-1)
@@ -78,7 +75,34 @@ def generate_graph_seq2seq_io_data(
 
     x = np.stack(x, axis=0)
     y = np.stack(y, axis=0)
-    return x, y
+
+    # x: (epoch_size, input_length, num_nodes, input_dim)
+    # y: (epoch_size, output_length, num_nodes, output_dim)
+
+    print("history (model_input): ", x.shape, " | future (model_output): ", y.shape)
+    # Write the data into npz file.
+    # num_test = 6831, using the last 6831 examples as testing.
+    # for the rest: 7/8 is used for training, and 1/8 is used for validation.
+    num_samples = x.shape[0]
+
+    num_test = test_timesteps if test_timesteps <= num_samples else num_samples
+    num_val = validation_timesteps if \
+        (test_timesteps + validation_timesteps) <= num_samples else 0
+    num_train = num_samples - num_test - num_val
+
+    # test
+    x_test, y_test = x[-num_test:], y[-num_test:]
+
+    # val
+    x_val, y_val = (
+        x[num_train: num_train + num_val],
+        y[num_train: num_train + num_val],
+        ) if num_val > 0 else (x_test, y_test)
+
+    # train
+    x_train, y_train = x[:num_train], y[:num_train]
+
+    return x_train, y_train, x_val, y_val, x_test, y_test, x_offsets, y_offsets
 
 
 def generate_train_val_test(args):
@@ -125,47 +149,27 @@ def generate_train_val_test(args):
 
     args.datetime_test_init = args.datetime_latest + timestep_size
 
-    x_offsets = np.arange(-args.history_timesteps + 1, 1, 1)
-    y_offsets = np.arange(1, args.future_timesteps + 1, 1)
+    arr2d = df.values
+    time_in_day_arr1d = (df.index.values - df.index.values.astype("datetime64[D]")) / \
+                        np.timedelta64(1, "D")
+    day_of_week_arr1d = df.index.dayofweek
 
-    # x: (num_samples, input_length, num_nodes, input_dim)
-    # y: (num_samples, output_length, num_nodes, output_dim)
-
-    x, y = generate_graph_seq2seq_io_data(
-        df,
-        x_offsets=x_offsets,
-        y_offsets=y_offsets,
-        add_time_in_day=args.add_time_in_day,
-        add_day_in_week=args.add_day_in_week,
-    )
-    print("history (model_input): ", x.shape, " | future (model_output): ", y.shape)
-    # Write the data into npz file.
-    # num_test = 6831, using the last 6831 examples as testing.
-    # for the rest: 7/8 is used for training, and 1/8 is used for validation.
-    num_samples = x.shape[0]
-    # num_test = round(num_samples * 0.2)
-    # num_train = round(num_samples * 0.7)
-    # num_val = num_samples - num_test - num_train
     assert args.test_timesteps >= 0
     assert args.validation_timesteps >= 0
-    num_test = args.test_timesteps if args.test_timesteps <= num_samples else num_samples
-    num_val = args.validation_timesteps if \
-        (args.test_timesteps + args.validation_timesteps) <= num_samples else 0
-    num_train = num_samples - num_test - num_val
-
-    # test
-    x_test, y_test = x[-num_test:], y[-num_test:]
-
-    # val
-    x_val, y_val = (
-        x[num_train: num_train + num_val],
-        y[num_train: num_train + num_val],
-        ) if num_val > 0 else (x_test, y_test)
-
-    # train
-    x_train, y_train = x[:num_train], y[:num_train]
 
 
+    x_train, y_train, x_val, y_val, x_test, y_test, x_offsets, y_offsets = \
+        generate_graph_seq2seq_io_data(
+            arr2d,
+            history_timesteps=args.history_timesteps,
+            future_timesteps=args.future_timesteps,
+            time_in_day_arr1d=time_in_day_arr1d,
+            day_of_week_arr1d=day_of_week_arr1d,
+            add_time_in_day=args.add_time_in_day,
+            add_day_in_week=args.add_day_in_week,
+            test_timesteps=args.test_timesteps,
+            validation_timesteps=args.validation_timesteps,
+            )
 
     for cat in ["train", "val", "test"]:
         _x, _y = locals()["x_" + cat], locals()["y_" + cat]
@@ -240,7 +244,7 @@ def main(args):
 if __name__ == "__main__":
     sys.path.append(os.getcwd())
     parser = argparse.ArgumentParser()
-    parser.add_argument("--test_only", type=bool, default=False,
+    parser.add_argument("--test_only", type=bool, default=True,
                         help="Skip training",)
 
     parser.add_argument("--traffic_df_filename", type=str, default="metr-la_data/metr-la.csv",
