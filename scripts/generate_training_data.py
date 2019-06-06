@@ -61,6 +61,7 @@ def generate_graph_seq2seq_io_data(
 
 
 def generate_train_val_test(args):
+    origin = '1970-01-01'
     traffic_df_path = Path(args.traffic_df_filename)
     if traffic_df_path.suffix in ['.h5', '.hdf5']:
         df = pd.read_hdf(args.traffic_df_filename)
@@ -72,12 +73,20 @@ def generate_train_val_test(args):
         if args.timestep_size_in_min > 0:
             freq = '{}min'.format(args.timestep_size_in_min)
             df = pd.read_csv(args.traffic_df_filename, index_col=False, sep=sep)
-            df['timestamp'] = pd.date_range(start='1970-01-01', periods=df.shape[0], freq=freq)
+            df['timestamp'] = pd.date_range(start=origin, periods=df.shape[0], freq=freq)
             df = df.set_index('timestamp')
         else:
             df = pd.read_csv(args.traffic_df_filename, index_col=0, parse_dates=[0], sep=sep)
 
     timestep_size = pd.Timedelta(args.timestep_size_in_min, unit='m')
+    assert (args.timestamp_latest is None) or (args.day_hour_min_latest is None)
+    if args.day_hour_min_latest:
+        print('Exclude future samples after future_timesteps since day_hour_min_latest is specified as: \n',
+              args.day_hour_min_latest)
+        d, h, m = [int(e) for e in args.day_hour_min_latest.split('_')]
+        args.datetime_latest = datetime.strptime(origin, "%Y-%m-%d") + \
+            pd.Timedelta(d-1, unit='d') + pd.Timedelta(h, unit='h') + pd.Timedelta(m, unit='m')
+        df = df.loc[:(args.datetime_latest + args.future_timesteps * timestep_size)]  # Note: .loc is inclusive
 
     if args.timestamp_latest:
         print('Exclude future samples after future_timesteps since timestamp_latest is specified as: \n',
@@ -176,8 +185,11 @@ if __name__ == "__main__":
                         help="Add day in week to the model input dimensions.",)
     parser.add_argument("--timestep_size_in_min", type=int, default=5,
                         help="Specify the timestep size in minutes.",)
-    parser.add_argument("--timestamp_latest", type=str, default='1970-02-15T18:00:00',
+    parser.add_argument("--timestamp_latest", type=str, default=None,
                         help="The timestamp of the latest datetime in "
                              "%Y-%m-%dT%H:%M:%S format e.g. '1970-02-15T18:00:00' ",)
+    parser.add_argument("--day_hour_min_latest", type=str, default='50_18_55',
+                        help="day, hour, minute of the latest datetime in "
+                             " dd_hh_mm format e.g. 50_18_15 ",)
     args = parser.parse_args()
     main(args)
