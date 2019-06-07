@@ -114,6 +114,7 @@ def setup_dataloader(arr3d,
                      train_batch_size,
                      val_batch_size,
                      test_batch_size,
+                     scale,
                     ):
     min_timesteps = (history_timesteps + future_timesteps)
     if ((test_timesteps - min_timesteps + 1) < test_batch_size):
@@ -149,7 +150,8 @@ def setup_dataloader(arr3d,
     val_z_arr3d = val_arr3d.copy()
     test_z_arr3d = test_arr3d.copy()
 
-    scaler = StandardScaler(mean=train_arr2d.mean(), std=train_arr2d.std())
+    scaler = StandardScaler(mean=train_arr2d.mean(), std=train_arr2d.std(),
+                            scale=scale)
     train_z_arr3d[:, :, 0] = scaler.transform(train_arr2d)
     val_z_arr3d[:, :, 0] = scaler.transform(val_arr2d)
     test_z_arr3d[:, :, 0] = scaler.transform(test_arr2d)
@@ -251,15 +253,16 @@ class StandardScaler:
     Standard the input
     """
 
-    def __init__(self, mean, std):
+    def __init__(self, mean, std, scale=True):
         self.mean = mean
         self.std = std
+        self.scale = scale
 
     def transform(self, data):
-        return (data - self.mean) / self.std
+        return (data - self.mean) / self.std if self.scale else data
 
     def inverse_transform(self, data):
-        return (data * self.std) + self.mean
+        return (data * self.std) + self.mean if self.scale else data
 
 
 
@@ -344,6 +347,7 @@ def generate_train_val_test(args):
             train_batch_size=args.train_batch_size,
             val_batch_size=args.val_batch_size,
             test_batch_size=args.test_batch_size,
+            scale=args.scale,
             )
         return dataloaders
 
@@ -485,6 +489,8 @@ if __name__ == "__main__":
     parser.add_argument('--train_batch_size', type=int, default=64)
     parser.add_argument('--val_batch_size', type=int, default=64)
     parser.add_argument('--test_batch_size', type=int, default=64)
+
+    parser.add_argument('--scale', type=bool, default=False)
 
     args = parser.parse_args()
     main(args)
