@@ -49,14 +49,18 @@ class DCRNNSupervisor(object):
         scaler = self._data['scaler']
         with tf.name_scope('Train'):
             with tf.variable_scope('DCRNN', reuse=False):
+                train_batch_size = dataloaders['train_loader'].batch_size if STDATALOADER \
+                    else self._data_kwargs['batch_size']
                 self._train_model = DCRNNModel(is_training=True, scaler=scaler,
-                                               batch_size=self._data_kwargs['batch_size'],
+                                               batch_size=train_batch_size,
                                                adj_mx=adj_mx, **self._model_kwargs)
 
         with tf.name_scope('Test'):
             with tf.variable_scope('DCRNN', reuse=True):
+                test_batch_size = dataloaders['test_loader'].batch_size if STDATALOADER \
+                    else self._data_kwargs['test_batch_size']
                 self._test_model = DCRNNModel(is_training=False, scaler=scaler,
-                                              batch_size=self._data_kwargs['test_batch_size'],
+                                              batch_size=test_batch_size,
                                               adj_mx=adj_mx, **self._model_kwargs)
 
         # Learning rate.
@@ -138,7 +142,7 @@ class DCRNNSupervisor(object):
         loss = self._loss_fn(preds=preds, labels=labels)
         fetches = {
             'loss': loss,
-            'mae': loss,
+            'mae': loss, # TODO: mae?
             'global_step': tf.train.get_or_create_global_step()
         }
         if training:

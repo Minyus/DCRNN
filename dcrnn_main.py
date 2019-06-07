@@ -112,7 +112,6 @@ def setup_dataloader(arr3d,
                      test_timesteps,
                      val_timesteps,
                      train_batch_size,
-                     val_batch_size,
                      test_batch_size,
                      scale,
                     ):
@@ -122,9 +121,9 @@ def setup_dataloader(arr3d,
         print('test_timesteps:', test_timesteps)
         print('test_batch_size', test_batch_size)
         print('test_timesteps was set to too small. Set to the minimum value:', test_timesteps)
-    if ((val_timesteps - min_timesteps + 1) < val_batch_size):
+    if ((val_timesteps - min_timesteps + 1) < test_batch_size):
         print('val_timesteps:', val_timesteps)
-        print('val_batch_size', val_batch_size)
+        print('test_batch_size', test_batch_size)
         print('Test dataset will be used as validation dataset as well. '
               'To use separate validation dataset, increase val_timesteps. ')
         val_timesteps = 0
@@ -163,7 +162,7 @@ def setup_dataloader(arr3d,
                                                    shuffle=False)
     assert dataloaders['test_loader'].num_batch > 0, 'num_batch for test dataset should be > 0'
 
-    dataloaders['val_loader'] = SpatioTemporalDataLoader(val_z_arr3d, val_batch_size,
+    dataloaders['val_loader'] = SpatioTemporalDataLoader(val_z_arr3d, test_batch_size,
                                                   history_timesteps,
                                                   future_timesteps,
                                                   shuffle=False)
@@ -345,7 +344,6 @@ def generate_train_val_test(args):
             test_timesteps=args.test_timesteps,
             val_timesteps=args.val_timesteps,
             train_batch_size=args.train_batch_size,
-            val_batch_size=args.val_batch_size,
             test_batch_size=args.test_batch_size,
             scale=args.scale,
             )
@@ -487,8 +485,9 @@ if __name__ == "__main__":
     parser.add_argument('--pred_arr2d_file', default='data/dcrnn_pred_arr2d.csv')
 
     parser.add_argument('--train_batch_size', type=int, default=64)
-    parser.add_argument('--val_batch_size', type=int, default=64)
-    parser.add_argument('--test_batch_size', type=int, default=64)
+    # parser.add_argument('--test_batch_size', type=int, default=1)
+    parser.add_argument('--test_batch_size', type=int, default=1,
+                        help="batch size for test and validation.")
 
     parser.add_argument('--scale', type=bool, default=False)
 
