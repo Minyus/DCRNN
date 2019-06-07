@@ -374,24 +374,34 @@ def generate_train_val_test(args):
                 y_offsets=y_offsets.reshape(list(y_offsets.shape) + [1]),
             )
 
-def train_dcrnn(args, dataloaders):
+def get_adj_mat(args):
+    adj_mat_filename = args.adj_mat_filename
+    if Path(adj_mat_filename).suffix in ['.pkl']:
+        sensor_ids, sensor_id_to_ind, adj_mx = load_graph_data(adj_mat_filename)
+    elif Path(adj_mat_filename).suffix in ['.csv']:
+        adj_mx = np.loadtxt(adj_mat_filename, dtype=np.float32, delimiter=',')
+    else:
+        adj_mx = np.loadtxt(adj_mat_filename, dtype=np.float32, delimiter=' ')
+    return adj_mx
+
+
+def train_dcrnn(args, dataloaders, adj_mx):
     tf.reset_default_graph()
     with open(args.config_filename) as f:
         supervisor_config = yaml.load(f)
         supervisor_config['train']['log_dir'] = args.model_dir
-        supervisor_config['data']['graph_pkl_filename'] = args.graph_pkl_filename
-        # graph_pkl_filename = supervisor_config['data'].get('graph_pkl_filename')
-        graph_pkl_filename = args.graph_pkl_filename
-        sensor_ids, sensor_id_to_ind, adj_mx = load_graph_data(graph_pkl_filename)
+        supervisor_config['data']['adj_mat_filename'] = args.adj_mat_filename
 
         tf_config = tf.ConfigProto()
         if args.use_cpu_only:
             tf_config = tf.ConfigProto(device_count={'GPU': 0})
         tf_config.gpu_options.allow_growth = True
         with tf.Session(config=tf_config) as sess:
-            supervisor = DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **supervisor_config)
+            supervisor = DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders,
+                                         **supervisor_config)
 
             supervisor.train(sess=sess)
+
 
 def get_model_filename(dir):
     path_list = list(Path(dir).glob('*.index'))
@@ -401,7 +411,7 @@ def get_model_filename(dir):
     return model_filename
 
 
-def run_dcrnn(args, dataloaders):
+def run_dcrnn(args, dataloaders, adj_mx):
     tf.reset_default_graph()
     with open(args.config_filename) as f:
         config = yaml.load(f)
@@ -409,9 +419,7 @@ def run_dcrnn(args, dataloaders):
     if args.use_cpu_only:
         tf_config = tf.ConfigProto(device_count={'GPU': 0})
     tf_config.gpu_options.allow_growth = True
-    # graph_pkl_filename = config['data']['graph_pkl_filename']
-    graph_pkl_filename = args.graph_pkl_filename
-    _, _, adj_mx = load_graph_data(graph_pkl_filename)
+
     with tf.Session(config=tf_config) as sess:
         supervisor = DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **config)
         # supervisor.load(sess, config['train']['model_filename'])
@@ -427,27 +435,27 @@ def run_dcrnn(args, dataloaders):
 
     np.savetxt(args.pred_arr2d_file, pred_arr2d, delimiter=',')
 
-def main(args):
-    dataloaders = generate_train_val_test(args)
-    if not args.test_only:
-        train_dcrnn(args, dataloaders)
-    run_dcrnn(args, dataloaders)
-
 if __name__ == "__main__":
     sys.path.append(os.getcwd())
     parser = argparse.ArgumentParser()
+
     parser.add_argument("--test_only", type=bool, default=True,
                         help="Skip training",)
 
-    parser.add_argument("--traffic_df_filename", type=str, default="metr-la_data/metr-la.csv",
-                        help="Raw traffic readings.",)
-    parser.add_argument("--graph_pkl_filename", type=str, default="metr-la_data/adj_mx.pkl",
+    parser.add_argument("--traffic_df_filename", type=str, default="metr-la_data/source_table/metr-la.csv",
+                        help="source traffic data.",)
+    parser.add_argument("--adj_mat_filename", type=str, default="metr-la_data/adj_mat/adj_mx.csv",
                         help="Graph adjacency matrix.",)
     parser.add_argument("--model_dir", type=str, default="metr-la_data/model",
                         help="model directory.",)
+    parser.add_argument('--config_filename', default='metr-la_data/config/config.yaml', type=str,
+                        help='Config file for modeling.')
+    parser.add_argument('--output_filename', default='metr-la_data/output/dcrnn_predictions.npz')
 
-    parser.add_argument("--output_dir", type=str, default="data/METR-LA",
-                        help="Output directory.",)
+    parser.add_argument('--pred_arr2d_file', default='metr-la_data/output/dcrnn_pred_arr2d.csv')
+
+    # parser.add_argument("--output_dir", type=str, default="data/METR-LA",
+    #                     help="Output directory.",)
 
     parser.add_argument("--history_timesteps", type=int, default=12,
                         help="timesteps to use as model input.",)
@@ -472,17 +480,12 @@ if __name__ == "__main__":
                         help="day, hour, minute of the latest datetime in "
                              " dd_hh_mm format e.g. 50_18_15 ",)
 
-    # parser.add_argument('--config_filename', default=None, type=str,
-    #                     help='Configuration filename for restoring the model.')
-    parser.add_argument('--use_cpu_only', default=False, type=bool, help='Set to true to only use cpu.')
+
+    parser.add_argument('--use_cpu_only', default=False, type=bool,
+                        help='Set to true to only use cpu.')
 
 
-    # parser.add_argument('--use_cpu_only', default=False, type=str, help='Whether to run tensorflow on cpu.')
-    parser.add_argument('--config_filename', default='metr-la_data/config.yaml', type=str,
-                        help='Config file for pretrained model.')
-    parser.add_argument('--output_filename', default='data/dcrnn_predictions.npz')
 
-    parser.add_argument('--pred_arr2d_file', default='data/dcrnn_pred_arr2d.csv')
 
     parser.add_argument('--train_batch_size', type=int, default=64)
     # parser.add_argument('--test_batch_size', type=int, default=1)
@@ -492,7 +495,12 @@ if __name__ == "__main__":
     parser.add_argument('--scale', type=bool, default=False)
 
     args = parser.parse_args()
-    main(args)
+
+    dataloaders = generate_train_val_test(args)
+    adj_mx = get_adj_mat(args)
+    if not args.test_only:
+        train_dcrnn(args, dataloaders, adj_mx)
+    run_dcrnn(args, dataloaders, adj_mx)
 
 
 

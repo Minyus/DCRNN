@@ -52,6 +52,8 @@ if __name__ == '__main__':
                         help='Entries that become lower than normalized_k after normalization are set to zero for sparsity.')
     parser.add_argument('--output_pkl_filename', type=str, default='data/sensor_graph/adj_mx.pkl',
                         help='Path of the output file.')
+    parser.add_argument('--output_csv_filename', type=str, default='data/sensor_graph/adj_mx.csv',
+                        help='Path of the output csv file.')
     args = parser.parse_args()
 
     with open(args.sensor_ids_filename) as f:
@@ -61,3 +63,5 @@ if __name__ == '__main__':
     # Save to pickle file.
     with open(args.output_pkl_filename, 'wb') as f:
         pickle.dump([sensor_ids, sensor_id_to_ind, adj_mx], f, protocol=2)
+
+    np.savetxt(args.output_csv_filename, adj_mx, delimiter=',')
