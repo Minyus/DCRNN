@@ -21,7 +21,7 @@ class DCRNNSupervisor(object):
     Do experiments using Graph Random Walk RNN model.
     """
 
-    def __init__(self, adj_mx, **kwargs):
+    def __init__(self, adj_mx, dataloaders, **kwargs):
 
         self._kwargs = kwargs
         self._data_kwargs = kwargs.get('data')
@@ -36,7 +36,11 @@ class DCRNNSupervisor(object):
         self._logger.info(kwargs)
 
         # Data preparation
-        self._data = utils.load_dataset(**self._data_kwargs)
+        STDATALOADER = True
+        if STDATALOADER:
+            self._data = dataloaders
+        if not STDATALOADER:
+            self._data = utils.load_dataset(**self._data_kwargs)
         for k, v in self._data.items():
             if hasattr(v, 'shape'):
                 self._logger.info((k, v.shape))
@@ -268,8 +272,12 @@ class DCRNNSupervisor(object):
         scaler = self._data['scaler']
         predictions = []
         y_truths = []
-        for horizon_i in range(self._data['y_test'].shape[1]):
-            y_truth = scaler.inverse_transform(self._data['y_test'][:, horizon_i, :, 0])
+        test_generator = self._data['test_loader'].get_iterator()
+        x, y = test_generator.__next__()
+        # for horizon_i in range(self._data['y_test'].shape[1]):
+        for horizon_i in range(self._data['test_loader'].future_timesteps):
+            # y_truth = scaler.inverse_transform(self._data['y_test'][:, horizon_i, :, 0])
+            y_truth = scaler.inverse_transform(y[:, horizon_i, :, 0])
             y_truths.append(y_truth)
 
             y_pred = scaler.inverse_transform(y_preds[:y_truth.shape[0], horizon_i, :, 0])

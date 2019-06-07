@@ -18,6 +18,7 @@ import os
 import sys
 import tensorflow as tf
 import yaml
+import random
 
 from lib.utils import load_graph_data
 from model.dcrnn_supervisor import DCRNNSupervisor
@@ -41,7 +42,7 @@ def generate_graph_seq2seq_io_data(arr2d,
                                    add_time_in_day,
                                    add_day_in_week,
                                    test_timesteps,
-                                   validation_timesteps
+                                   val_timesteps
                                    ):
 
     x_offsets = np.arange(-history_timesteps + 1, 1, 1)
@@ -86,8 +87,8 @@ def generate_graph_seq2seq_io_data(arr2d,
     num_samples = x.shape[0]
 
     num_test = test_timesteps if test_timesteps <= num_samples else num_samples
-    num_val = validation_timesteps if \
-        (test_timesteps + validation_timesteps) <= num_samples else 0
+    num_val = val_timesteps if \
+        (test_timesteps + val_timesteps) <= num_samples else 0
     num_train = num_samples - num_test - num_val
 
     # test
@@ -105,9 +106,172 @@ def generate_graph_seq2seq_io_data(arr2d,
     return x_train, y_train, x_val, y_val, x_test, y_test, x_offsets, y_offsets
 
 
+def setup_dataloader(arr3d,
+                     history_timesteps,
+                     future_timesteps,
+                     test_timesteps,
+                     val_timesteps,
+                     train_batch_size,
+                     val_batch_size,
+                     test_batch_size,
+                    ):
+    min_timesteps = (history_timesteps + future_timesteps)
+    if ((test_timesteps - min_timesteps + 1) < test_batch_size):
+        test_timesteps = test_batch_size + min_timesteps - 1
+        print('test_timesteps:', test_timesteps)
+        print('test_batch_size', test_batch_size)
+        print('test_timesteps was set to too small. Set to the minimum value:', test_timesteps)
+    if ((val_timesteps - min_timesteps + 1) < val_batch_size):
+        print('val_timesteps:', val_timesteps)
+        print('val_batch_size', val_batch_size)
+        print('Test dataset will be used as validation dataset as well. '
+              'To use separate validation dataset, increase val_timesteps. ')
+        val_timesteps = 0
+        
+
+    num_samples, num_nodes, _ = arr3d.shape
+
+    num_test = test_timesteps if test_timesteps <= num_samples else num_samples
+    num_val = val_timesteps if \
+        (test_timesteps + val_timesteps) <= num_samples else 0
+    num_train = num_samples - num_test - num_val
+    print(' num_train: {} \n num_val: {} \n num_test: {}'.format(num_train, num_val, num_test))
+
+    test_arr3d = arr3d[-num_test:]
+    val_arr3d = arr3d[num_train: num_train + num_val] if num_val > 0 else test_arr3d
+    train_arr3d = arr3d[:num_train]
+
+    train_arr2d = train_arr3d[:, :, 0]
+    val_arr2d = val_arr3d[:, :, 0]
+    test_arr2d = test_arr3d[:, :, 0]
+
+    train_z_arr3d = train_arr3d.copy()
+    val_z_arr3d = val_arr3d.copy()
+    test_z_arr3d = test_arr3d.copy()
+
+    scaler = StandardScaler(mean=train_arr2d.mean(), std=train_arr2d.std())
+    train_z_arr3d[:, :, 0] = scaler.transform(train_arr2d)
+    val_z_arr3d[:, :, 0] = scaler.transform(val_arr2d)
+    test_z_arr3d[:, :, 0] = scaler.transform(test_arr2d)
+
+    dataloaders = {}
+    dataloaders['test_loader'] = SpatioTemporalDataLoader(test_z_arr3d, test_batch_size,
+                                                   history_timesteps,
+                                                   future_timesteps,
+                                                   shuffle=False)
+    assert dataloaders['test_loader'].num_batch > 0, 'num_batch for test dataset should be > 0'
+
+    dataloaders['val_loader'] = SpatioTemporalDataLoader(val_z_arr3d, val_batch_size,
+                                                  history_timesteps,
+                                                  future_timesteps,
+                                                  shuffle=False)
+    dataloaders['train_loader'] = SpatioTemporalDataLoader(train_z_arr3d, train_batch_size,
+                                                    history_timesteps,
+                                                    future_timesteps,
+                                                    shuffle=True)
+
+    dataloaders['scaler'] = scaler
+    print('train # batches:', dataloaders['train_loader'].num_batch)
+    print('val # batches:', dataloaders['val_loader'].num_batch)
+    print('test # batches:', dataloaders['test_loader'].num_batch)
+
+    return dataloaders
+
+
+class SpatioTemporalDataLoader(object):
+    def __init__(self, arr3d, batch_size,
+                 history_timesteps,
+                 future_timesteps,
+                 shuffle=False,
+                 pad_with_last_sample=False):
+        """
+
+        :param arr3d:
+        :param batch_size:
+        :param pad_with_last_sample: pad with the last sample to make number of samples divisible to batch_size.
+        """
+        self.history_timesteps = history_timesteps
+        self.future_timesteps = future_timesteps
+        self.batch_size = batch_size
+        self.current_ind = 0
+        self.size = max((arr3d.shape[0] - (history_timesteps + future_timesteps) + 1), 0)
+        remainder = (self.size % batch_size)
+        if pad_with_last_sample:
+            num_padding = (batch_size - remainder)
+            x_padding = np.repeat(arr3d[-1:], num_padding, axis=0)
+            arr3d = np.concatenate([arr3d, x_padding], axis=0)
+            self.size = arr3d.shape[0] - (history_timesteps + future_timesteps)
+        else:
+            # drop first
+            arr3d = arr3d[remainder:]
+
+        self.num_batch = int(self.size // self.batch_size)
+
+        self.size = self.num_batch * self.batch_size
+
+        # if shuffle:
+        #     permutation = np.random.permutation(self.size)
+        #     xs = xs[permutation]
+        self.shuffle = shuffle
+        self.arr3d = arr3d
+
+
+    def get_iterator(self):
+        self.current_ind = 0
+
+        def range_list(size, shuffle=False):
+            seq = range(size).__reversed__()
+            out = list(seq)
+            if shuffle:
+                random.shuffle(out)
+            return out
+
+        sample_index_list = range_list(self.size, shuffle=self.shuffle)
+
+        def _wrapper():
+            while self.current_ind < self.num_batch:
+
+                x_i, y_i = [], []
+                for _ in range(self.batch_size):
+                    i = sample_index_list.pop()
+                    hist_i = i + self.history_timesteps
+                    future_i = hist_i + self.future_timesteps
+                    x_i.append(self.arr3d[i:hist_i])
+                    y_i.append(self.arr3d[hist_i:future_i])
+                x_i = np.stack(x_i)
+                y_i = np.stack(y_i)
+                yield (x_i, y_i)
+                self.current_ind += 1
+
+        return _wrapper()
+
+
+class StandardScaler:
+    """
+    Standard the input
+    """
+
+    def __init__(self, mean, std):
+        self.mean = mean
+        self.std = std
+
+    def transform(self, data):
+        return (data - self.mean) / self.std
+
+    def inverse_transform(self, data):
+        return (data * self.std) + self.mean
+
+
+
+
+
 def generate_train_val_test(args):
     print("Converting data from 2d of (epoch_timesteps, num_nodes) \n"
           "to 4d of (epoch_timesteps, model_timesteps, num_nodes, dimension).")
+
+    assert args.test_timesteps >= 0
+    assert args.val_timesteps >= 0
+
     origin = '1970-01-01'
     traffic_df_path = Path(args.traffic_df_filename)
     if traffic_df_path.suffix in ['.h5', '.hdf5']:
@@ -154,35 +318,61 @@ def generate_train_val_test(args):
                         np.timedelta64(1, "D")
     day_of_week_arr1d = df.index.dayofweek
 
-    assert args.test_timesteps >= 0
-    assert args.validation_timesteps >= 0
+    def broadcast_last_dim(arr1d, num_broadcast):
+        arr2d = np.expand_dims(arr1d, -1)
+        arr2d = np.tile(arr2d, (1, num_broadcast))
+        return arr2d
 
+    broadcast_last_dim(time_in_day_arr1d, arr2d.shape[-1])
 
-    x_train, y_train, x_val, y_val, x_test, y_test, x_offsets, y_offsets = \
-        generate_graph_seq2seq_io_data(
-            arr2d,
+    arr2d_list = [arr2d]
+    if args.add_time_in_day:
+        arr2d_list.append(broadcast_last_dim(time_in_day_arr1d, arr2d.shape[-1]))
+    if args.add_day_of_week:
+        arr2d_list.append(broadcast_last_dim(day_of_week_arr1d, arr2d.shape[-1]))
+
+    arr3d = np.stack(arr2d_list, axis=-1)
+
+    STDATALOADER = True
+    if STDATALOADER:
+        dataloaders = setup_dataloader(
+            arr3d,
             history_timesteps=args.history_timesteps,
             future_timesteps=args.future_timesteps,
-            time_in_day_arr1d=time_in_day_arr1d,
-            day_of_week_arr1d=day_of_week_arr1d,
-            add_time_in_day=args.add_time_in_day,
-            add_day_in_week=args.add_day_in_week,
             test_timesteps=args.test_timesteps,
-            validation_timesteps=args.validation_timesteps,
+            val_timesteps=args.val_timesteps,
+            train_batch_size=args.train_batch_size,
+            val_batch_size=args.val_batch_size,
+            test_batch_size=args.test_batch_size,
+            )
+        return dataloaders
+
+    if not STDATALOADER:
+        x_train, y_train, x_val, y_val, x_test, y_test, x_offsets, y_offsets = \
+            generate_graph_seq2seq_io_data(
+                arr2d,
+                history_timesteps=args.history_timesteps,
+                future_timesteps=args.future_timesteps,
+                time_in_day_arr1d=time_in_day_arr1d,
+                day_of_week_arr1d=day_of_week_arr1d,
+                add_time_in_day=args.add_time_in_day,
+                add_day_in_week=args.add_day_in_week,
+                test_timesteps=args.test_timesteps,
+                val_timesteps=args.val_timesteps,
+                )
+
+        for cat in ["train", "val", "test"]:
+            _x, _y = locals()["x_" + cat], locals()["y_" + cat]
+            print(cat, " >> history (model_input):", _x.shape, " | future (model_output): ", _y.shape)
+            np.savez_compressed(
+                os.path.join(args.output_dir, "%s.npz" % cat),
+                x=_x,
+                y=_y,
+                x_offsets=x_offsets.reshape(list(x_offsets.shape) + [1]),
+                y_offsets=y_offsets.reshape(list(y_offsets.shape) + [1]),
             )
 
-    for cat in ["train", "val", "test"]:
-        _x, _y = locals()["x_" + cat], locals()["y_" + cat]
-        print(cat, " >> history (model_input):", _x.shape, " | future (model_output): ", _y.shape)
-        np.savez_compressed(
-            os.path.join(args.output_dir, "%s.npz" % cat),
-            x=_x,
-            y=_y,
-            x_offsets=x_offsets.reshape(list(x_offsets.shape) + [1]),
-            y_offsets=y_offsets.reshape(list(y_offsets.shape) + [1]),
-        )
-
-def train_dcrnn(args):
+def train_dcrnn(args, dataloaders):
     tf.reset_default_graph()
     with open(args.config_filename) as f:
         supervisor_config = yaml.load(f)
@@ -197,7 +387,7 @@ def train_dcrnn(args):
             tf_config = tf.ConfigProto(device_count={'GPU': 0})
         tf_config.gpu_options.allow_growth = True
         with tf.Session(config=tf_config) as sess:
-            supervisor = DCRNNSupervisor(adj_mx=adj_mx, **supervisor_config)
+            supervisor = DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **supervisor_config)
 
             supervisor.train(sess=sess)
 
@@ -209,7 +399,7 @@ def get_model_filename(dir):
     return model_filename
 
 
-def run_dcrnn(args):
+def run_dcrnn(args, dataloaders):
     tf.reset_default_graph()
     with open(args.config_filename) as f:
         config = yaml.load(f)
@@ -221,7 +411,7 @@ def run_dcrnn(args):
     graph_pkl_filename = args.graph_pkl_filename
     _, _, adj_mx = load_graph_data(graph_pkl_filename)
     with tf.Session(config=tf_config) as sess:
-        supervisor = DCRNNSupervisor(adj_mx=adj_mx, **config)
+        supervisor = DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **config)
         # supervisor.load(sess, config['train']['model_filename'])
         model_filename = get_model_filename(args.model_dir)
         supervisor.load(sess, model_filename)
@@ -236,10 +426,10 @@ def run_dcrnn(args):
     np.savetxt(args.pred_arr2d_file, pred_arr2d, delimiter=',')
 
 def main(args):
-    generate_train_val_test(args)
+    dataloaders = generate_train_val_test(args)
     if not args.test_only:
-        train_dcrnn(args)
-    run_dcrnn(args)
+        train_dcrnn(args, dataloaders)
+    run_dcrnn(args, dataloaders)
 
 if __name__ == "__main__":
     sys.path.append(os.getcwd())
@@ -262,21 +452,21 @@ if __name__ == "__main__":
     parser.add_argument("--future_timesteps", type=int, default=12,
                         help="timesteps to predict by the model.",)
 
-    parser.add_argument("--test_timesteps", type=int, default=12,
+    parser.add_argument("--test_timesteps", type=int, default=88,
                         help="timesteps for test.",)
-    parser.add_argument("--validation_timesteps", type=int, default=0,
+    parser.add_argument("--val_timesteps", type=int, default=0,
                         help="timesteps for validation. "
                              "if 0, test dataset is used as validation.",)
     parser.add_argument("--add_time_in_day", type=bool, default=True,
                         help="Add time in day to the model input dimensions.",)
-    parser.add_argument("--add_day_in_week", type=bool, default=False,
-                        help="Add day in week to the model input dimensions.",)
+    parser.add_argument("--add_day_of_week", type=bool, default=False,
+                        help="Add day of week to the model input dimensions.",)
     parser.add_argument("--timestep_size_in_min", type=int, default=5,
                         help="Specify the timestep size in minutes.",)
     parser.add_argument("--timestamp_latest", type=str, default=None,
                         help="The timestamp of the latest datetime in "
                              "%Y-%m-%dT%H:%M:%S format e.g. '1970-02-15T18:00:00' ",)
-    parser.add_argument("--day_hour_min_latest", type=str, default='1_02_55',
+    parser.add_argument("--day_hour_min_latest", type=str, default='1_18_55',
                         help="day, hour, minute of the latest datetime in "
                              " dd_hh_mm format e.g. 50_18_15 ",)
 
@@ -291,6 +481,10 @@ if __name__ == "__main__":
     parser.add_argument('--output_filename', default='data/dcrnn_predictions.npz')
 
     parser.add_argument('--pred_arr2d_file', default='data/dcrnn_pred_arr2d.csv')
+
+    parser.add_argument('--train_batch_size', type=int, default=64)
+    parser.add_argument('--val_batch_size', type=int, default=64)
+    parser.add_argument('--test_batch_size', type=int, default=64)
 
     args = parser.parse_args()
     main(args)
