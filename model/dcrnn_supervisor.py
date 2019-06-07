@@ -272,10 +272,15 @@ class DCRNNSupervisor(object):
         scaler = self._data['scaler']
         predictions = []
         y_truths = []
-        test_generator = self._data['test_loader'].get_iterator()
-        x, y = test_generator.__next__()
+
+        STDATALOADER = True
+        if STDATALOADER:
+            test_generator = self._data['test_loader'].get_iterator()
+            x, y = test_generator.__next__()
+        if not STDATALOADER:
+            y = self._data['y_test']
         # for horizon_i in range(self._data['y_test'].shape[1]):
-        for horizon_i in range(self._data['test_loader'].future_timesteps):
+        for horizon_i in range(y.shape[1]):
             # y_truth = scaler.inverse_transform(self._data['y_test'][:, horizon_i, :, 0])
             y_truth = scaler.inverse_transform(y[:, horizon_i, :, 0])
             y_truths.append(y_truth)
