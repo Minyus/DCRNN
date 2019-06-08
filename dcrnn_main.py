@@ -109,25 +109,29 @@ def generate_graph_seq2seq_io_data(arr2d,
 def setup_dataloader(arr3d,
                      history_timesteps,
                      future_timesteps,
-                     test_timesteps,
-                     val_timesteps,
+                     test_samples,
+                     val_samples,
                      train_batch_size,
                      test_batch_size,
                      scale,
                     ):
-    min_timesteps = (history_timesteps + future_timesteps)
-    if ((test_timesteps - min_timesteps + 1) < test_batch_size):
-        test_timesteps = test_batch_size + min_timesteps - 1
-        print('test_timesteps:', test_timesteps)
-        print('test_batch_size', test_batch_size)
-        print('test_timesteps was set to too small. Set to the minimum value:', test_timesteps)
-    if ((val_timesteps - min_timesteps + 1) < test_batch_size):
-        print('val_timesteps:', val_timesteps)
-        print('test_batch_size', test_batch_size)
+
+    assert test_samples >= 1
+    assert val_samples >= 0
+
+    timesteps_per_sample = (history_timesteps + future_timesteps)
+
+    test_timesteps = test_samples - 1 + timesteps_per_sample
+    val_timesteps = val_samples - 1 + timesteps_per_sample if val_samples > 0 else 0
+
+    assert test_samples >= test_batch_size, \
+        'test_samples: {} | test_batch_size:{}'.format(test_samples, test_batch_size)
+    assert val_samples == 0 or val_samples >= test_batch_size, \
+        'val_samples: {} | test_batch_size:{}'.format(val_samples, test_batch_size)
+
+    if val_timesteps == 0:
         print('Test dataset will be used as validation dataset as well. '
               'To use separate validation dataset, increase val_timesteps. ')
-        val_timesteps = 0
-        
 
     num_samples, num_nodes, _ = arr3d.shape
 
@@ -264,17 +268,12 @@ class StandardScaler:
         return (data * self.std) + self.mean if self.scale else data
 
 
-
-
-
 def generate_train_val_test(args):
     print("Converting data from 2d of (epoch_timesteps, num_nodes) \n"
           "to 4d of (epoch_timesteps, model_timesteps, num_nodes, dimension).")
 
-    assert args.test_timesteps >= 0
-    assert args.val_timesteps >= 0
-
-    origin = '1970-01-01'
+    timestep_size_freq = '{}min'.format(args.timestep_size_in_min)
+    timestep_size = pd.Timedelta(args.timestep_size_in_min, unit='m')
     traffic_df_path = Path(args.traffic_df_filename)
     if traffic_df_path.suffix in ['.h5', '.hdf5']:
         df = pd.read_hdf(args.traffic_df_filename)
@@ -284,36 +283,49 @@ def generate_train_val_test(args):
     else:
         sep = ',' if traffic_df_path.suffix in ['.csv'] else ' '
         if args.timestep_size_in_min > 0:
-            freq = '{}min'.format(args.timestep_size_in_min)
             df = pd.read_csv(args.traffic_df_filename, index_col=False, sep=sep)
-            df['timestamp'] = pd.date_range(start=origin, periods=df.shape[0], freq=freq)
+            df['timestamp'] = \
+                pd.date_range(start='1970-01-01', periods=df.shape[0], freq=timestep_size_freq)
             df = df.set_index('timestamp')
         else:
             df = pd.read_csv(args.traffic_df_filename, index_col=0, parse_dates=[0], sep=sep)
 
-    timestep_size = pd.Timedelta(args.timestep_size_in_min, unit='m')
-    assert (args.timestamp_latest is None) or (args.day_hour_min_latest is None)
+    args.datetime_start = df.index.values[0]
+
+    # assert (args.timestamp_latest is None) or (args.day_hour_min_latest is None)
     if args.day_hour_min_latest:
         print('Exclude future samples after future_timesteps since day_hour_min_latest is specified as: \n',
               args.day_hour_min_latest)
         d, h, m = [int(e) for e in args.day_hour_min_latest.split('_')]
-        args.datetime_latest = datetime.strptime(origin, "%Y-%m-%d") + \
+        args.datetime_latest = args.datetime_start + \
             pd.Timedelta(d-1, unit='d') + pd.Timedelta(h, unit='h') + pd.Timedelta(m, unit='m')
-        df = df.loc[:(args.datetime_latest + args.future_timesteps * timestep_size)]  # Note: .loc is inclusive
 
-    if args.timestamp_latest:
+    elif args.timestamp_latest:
         print('Exclude future samples after future_timesteps since timestamp_latest is specified as: \n',
               args.timestamp_latest)
         args.datetime_latest = datetime.strptime(args.timestamp_latest, "%Y-%m-%dT%H:%M:%S")
-        df = df.loc[:(args.datetime_latest + args.future_timesteps * timestep_size)] # Note: .loc is inclusive
+
+    else:
+        args.datetime_latest = df.index.values[-1]
+
+    print('The latest datetime (timestamp "T"): ', args.datetime_latest)
+
+    args.datetime_future_start = args.datetime_latest + timestep_size
+    args.datetime_future_end = args.datetime_latest + args.future_timesteps * timestep_size
+
+    d_df = pd.DataFrame()
+    d_df['timestamp'] = pd.date_range(start=args.datetime_start, end=args.datetime_future_end,
+                                      freq=timestep_size_freq) # Note: end is inclusive.
+    d_df = d_df.set_index('timestamp')
+    df = pd.merge(d_df, df, how='left', left_index=True, right_index=True)
+
+    # df = df.loc[:(args.datetime_latest + args.future_timesteps * timestep_size)]  # Note: .loc is inclusive
 
     # Keep timestamp info to output final prediction table
-    args.datetime_max = df.index.values[-1]
-    print('The maximum of datetime: ', args.datetime_max)
-    args.datetime_latest = args.datetime_max - \
-                            args.future_timesteps * timestep_size
-
-    args.datetime_test_init = args.datetime_latest + timestep_size
+    # args.datetime_max = df.index.values[-1]
+    # print('The maximum of datetime: ', args.datetime_max)
+    # args.datetime_latest = args.datetime_max - \
+    #                         args.future_timesteps * timestep_size
 
     arr2d = df.values
     time_in_day_arr1d = (df.index.values - df.index.values.astype("datetime64[D]")) / \
@@ -341,8 +353,8 @@ def generate_train_val_test(args):
             arr3d,
             history_timesteps=args.history_timesteps,
             future_timesteps=args.future_timesteps,
-            test_timesteps=args.test_timesteps,
-            val_timesteps=args.val_timesteps,
+            test_samples=args.test_samples,
+            val_samples=args.val_samples,
             train_batch_size=args.train_batch_size,
             test_batch_size=args.test_batch_size,
             scale=args.scale,
@@ -373,6 +385,7 @@ def generate_train_val_test(args):
                 x_offsets=x_offsets.reshape(list(x_offsets.shape) + [1]),
                 y_offsets=y_offsets.reshape(list(y_offsets.shape) + [1]),
             )
+        return None
 
 def get_adj_mat(args):
     adj_mat_filename = args.adj_mat_filename
@@ -462,35 +475,45 @@ if __name__ == "__main__":
     parser.add_argument("--future_timesteps", type=int, default=12,
                         help="timesteps to predict by the model.",)
 
-    parser.add_argument("--test_timesteps", type=int, default=88,
+    parser.add_argument("--test_samples", type=int, default=1,
                         help="timesteps for test.",)
-    parser.add_argument("--val_timesteps", type=int, default=0,
+    parser.add_argument("--val_samples", type=int, default=0,
                         help="timesteps for validation. "
                              "if 0, test dataset is used as validation.",)
+
+    # parser.add_argument("--test_timesteps", type=int, default=88,
+    #                     help="timesteps for test.",)
+    # parser.add_argument("--val_timesteps", type=int, default=0,
+    #                     help="timesteps for validation. "
+    #                          "if 0, test dataset is used as validation.",)
+
+    parser.add_argument('--test_batch_size', type=int, default=1,
+                        help="batch size for test and validation.")
+    parser.add_argument('--train_batch_size', type=int, default=64)
+
     parser.add_argument("--add_time_in_day", type=bool, default=True,
                         help="Add time in day to the model input dimensions.",)
     parser.add_argument("--add_day_of_week", type=bool, default=False,
                         help="Add day of week to the model input dimensions.",)
     parser.add_argument("--timestep_size_in_min", type=int, default=5,
                         help="Specify the timestep size in minutes.",)
-    parser.add_argument("--timestamp_latest", type=str, default=None,
-                        help="The timestamp of the latest datetime in "
-                             "%Y-%m-%dT%H:%M:%S format e.g. '1970-02-15T18:00:00' ",)
+
     parser.add_argument("--day_hour_min_latest", type=str, default='1_18_55',
                         help="day, hour, minute of the latest datetime in "
-                             " dd_hh_mm format e.g. 50_18_15 ",)
-
+                             "dd_hh_mm format e.g. 50_18_15 "
+                             "or empty string '' to use the latest date in the table data. ",)
+    parser.add_argument("--timestamp_latest", type=str, default='',
+                        help="[ignored if day_hour_min_latest is provided.] "
+                             "The timestamp of the latest datetime in "
+                             "%Y-%m-%dT%H:%M:%S format e.g. '1970-02-15T18:00:00' "
+                             "or empty string '' to use the latest date in the table data. ",)
+    # parser.add_argument("--future_data_included", type=bool, default=True,
+    #                     help="The future samples to predict are included in the table.",)
 
     parser.add_argument('--use_cpu_only', default=False, type=bool,
                         help='Set to true to only use cpu.')
 
 
-
-
-    parser.add_argument('--train_batch_size', type=int, default=64)
-    # parser.add_argument('--test_batch_size', type=int, default=1)
-    parser.add_argument('--test_batch_size', type=int, default=1,
-                        help="batch size for test and validation.")
 
     parser.add_argument('--scale', type=bool, default=False)
 
