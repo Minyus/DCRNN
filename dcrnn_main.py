@@ -400,18 +400,18 @@ def get_adj_mat(args):
 
 def train_dcrnn(args, dataloaders, adj_mx):
     tf.reset_default_graph()
-    with open(args.config_filename) as f:
-        supervisor_config = yaml.load(f)
-        supervisor_config['train']['log_dir'] = args.model_dir
-        supervisor_config['data']['adj_mat_filename'] = args.adj_mat_filename
-
+    # with open(args.config_filename) as f:
+    #     supervisor_config = yaml.load(f)
+    #     args['train']['log_dir'] = args.model_dir
+    #     args['data']['adj_mat_filename'] = args.adj_mat_filename
+    if 1:
         tf_config = tf.ConfigProto()
         if args.use_cpu_only:
             tf_config = tf.ConfigProto(device_count={'GPU': 0})
         tf_config.gpu_options.allow_growth = True
         with tf.Session(config=tf_config) as sess:
             supervisor = DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders,
-                                         **supervisor_config)
+                                         **args)
 
             supervisor.train(sess=sess)
 
@@ -426,8 +426,6 @@ def get_model_filename(dir):
 
 def run_dcrnn(args, dataloaders, adj_mx):
 
-    with open(args.config_filename) as f:
-        config = yaml.load(f)
     model_filename = get_model_filename(args.model_dir)
 
     tf.reset_default_graph()
@@ -450,76 +448,81 @@ def run_dcrnn(args, dataloaders, adj_mx):
 
     np.savetxt(args.pred_arr2d_file, pred_arr2d, delimiter=',')
 
+
+class DotDict(dict):
+    """dot.notation access to dictionary attributes"""
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
 if __name__ == "__main__":
     sys.path.append(os.getcwd())
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--test_only", type=bool, default=True,
-                        help="Skip training",)
-
-    parser.add_argument("--traffic_df_filename", type=str, default="metr-la_data/source_table/metr-la.csv",
-                        help="source traffic data.",)
-    parser.add_argument("--adj_mat_filename", type=str, default="metr-la_data/adj_mat/adj_mx.csv",
-                        help="Graph adjacency matrix.",)
-    parser.add_argument("--model_dir", type=str, default="metr-la_data/model",
-                        help="model directory.",)
     parser.add_argument('--config_filename', default='metr-la_data/config/config.yaml', type=str,
                         help='Config file for modeling.')
-    parser.add_argument('--output_filename', default='metr-la_data/output/dcrnn_predictions.npz')
 
-    parser.add_argument('--pred_arr2d_file', default='metr-la_data/output/dcrnn_pred_arr2d.csv')
-
-    # parser.add_argument("--output_dir", type=str, default="data/METR-LA",
-    #                     help="Output directory.",)
-
-    parser.add_argument("--seq_len", type=int, default=12,
-                        help="timesteps to use as model input.",)
-    parser.add_argument("--horizon", type=int, default=12,
-                        help="timesteps to predict by the model.",)
-
-    parser.add_argument("--test_samples", type=int, default=1,
-                        help="timesteps for test.",)
-    parser.add_argument("--val_samples", type=int, default=0,
-                        help="timesteps for validation. "
-                             "if 0, test dataset is used as validation.",)
-
-    # parser.add_argument("--test_timesteps", type=int, default=88,
+    # parser.add_argument("--test_only", type=bool, default=True,
+    #                     help="Skip training",)
+    #
+    # parser.add_argument("--traffic_df_filename", type=str, default="metr-la_data/source_table/metr-la.csv",
+    #                     help="source traffic data.",)
+    # parser.add_argument("--adj_mat_filename", type=str, default="metr-la_data/adj_mat/adj_mx.csv",
+    #                     help="Graph adjacency matrix.",)
+    # parser.add_argument("--model_dir", type=str, default="metr-la_data/model",
+    #                     help="model directory.",)
+    #
+    # parser.add_argument('--output_filename', default='metr-la_data/output/dcrnn_predictions.npz')
+    #
+    # parser.add_argument('--pred_arr2d_file', default='metr-la_data/output/dcrnn_pred_arr2d.csv')
+    #
+    #
+    # parser.add_argument("--seq_len", type=int, default=12,
+    #                     help="timesteps to use as model input.",)
+    # parser.add_argument("--horizon", type=int, default=12,
+    #                     help="timesteps to predict by the model.",)
+    #
+    # parser.add_argument("--test_samples", type=int, default=1,
     #                     help="timesteps for test.",)
-    # parser.add_argument("--val_timesteps", type=int, default=0,
+    # parser.add_argument("--val_samples", type=int, default=0,
     #                     help="timesteps for validation. "
     #                          "if 0, test dataset is used as validation.",)
-
-    parser.add_argument('--test_batch_size', type=int, default=1,
-                        help="batch size for test and validation.")
-    parser.add_argument('--train_batch_size', type=int, default=64)
-
-    parser.add_argument("--add_time_in_day", type=bool, default=True,
-                        help="Add time in day to the model input dimensions.",)
-    parser.add_argument("--add_day_of_week", type=bool, default=False,
-                        help="Add day of week to the model input dimensions.",)
-    parser.add_argument("--timestep_size_in_min", type=int, default=5,
-                        help="Specify the timestep size in minutes.",)
-
-    parser.add_argument("--day_hour_min_latest", type=str, default='1_18_55',
-                        help="day, hour, minute of the latest datetime in "
-                             "dd_hh_mm format e.g. 50_18_15 "
-                             "or empty string '' to use the latest date in the table data. ",)
-    parser.add_argument("--timestamp_latest", type=str, default='',
-                        help="[ignored if day_hour_min_latest is provided.] "
-                             "The timestamp of the latest datetime in "
-                             "%Y-%m-%dT%H:%M:%S format e.g. '1970-02-15T18:00:00' "
-                             "or empty string '' to use the latest date in the table data. ",)
-    # parser.add_argument("--future_data_included", type=bool, default=True,
-    #                     help="The future samples to predict are included in the table.",)
-
-    parser.add_argument('--use_cpu_only', default=False, type=bool,
-                        help='Set to true to only use cpu.')
-
-
-
-    parser.add_argument('--scale', type=bool, default=False)
+    #
+    # parser.add_argument('--test_batch_size', type=int, default=1,
+    #                     help="batch size for test and validation.")
+    # parser.add_argument('--train_batch_size', type=int, default=64)
+    #
+    # parser.add_argument("--add_time_in_day", type=bool, default=True,
+    #                     help="Add time in day to the model input dimensions.",)
+    # parser.add_argument("--add_day_of_week", type=bool, default=False,
+    #                     help="Add day of week to the model input dimensions.",)
+    # parser.add_argument("--timestep_size_in_min", type=int, default=5,
+    #                     help="Specify the timestep size in minutes.",)
+    #
+    # parser.add_argument("--day_hour_min_latest", type=str, default='1_18_55',
+    #                     help="day, hour, minute of the latest datetime in "
+    #                          "dd_hh_mm format e.g. 50_18_15 "
+    #                          "or empty string '' to use the latest date in the table data. ",)
+    # parser.add_argument("--timestamp_latest", type=str, default='',
+    #                     help="[ignored if day_hour_min_latest is provided.] "
+    #                          "The timestamp of the latest datetime in "
+    #                          "%Y-%m-%dT%H:%M:%S format e.g. '1970-02-15T18:00:00' "
+    #                          "or empty string '' to use the latest date in the table data. ",)
+    #
+    # parser.add_argument('--use_cpu_only', default=False, type=bool,
+    #                     help='Set to true to only use cpu.')
+    #
+    # parser.add_argument('--scale', type=bool, default=False)
 
     args = parser.parse_args()
+
+    with open(args.config_filename) as f:
+        config = yaml.load(f)
+
+    args = DotDict({})
+    args.update(config)
+    # for k, v in config.items():
+    #     args[k] = v
 
     dataloaders = generate_train_val_test(args)
     adj_mx = get_adj_mat(args)

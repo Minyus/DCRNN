@@ -1,0 +1,65 @@
+base_dir: DEPRECATED data/model
+log_level: INFO
+
+test_only: true
+traffic_df_filename: metr-la_data/source_table/metr-la.csv
+
+model_dir: metr-la_data/model
+output_filename: metr-la_data/output/dcrnn_predictions.npz
+pred_arr2d_file: metr-la_data/output/dcrnn_pred_arr2d.csv
+seq_len: 12
+horizon: 12
+test_samples: 1
+val_samples: 0
+test_batch_size: 1
+train_batch_size: 64
+add_time_in_day: true
+add_day_of_week: false
+timestep_size_in_min: 5
+day_hour_min_latest: 01_18_55
+timestamp_latest: 
+use_cpu_only: false
+scale: false
+adj_mat_filename: metr-la_data/adj_mat/adj_mx.csv
+
+data:
+  adj_mat_filename: metr-la_data/adj_mat/adj_mx.csv
+  batch_size: DEPRECATED 64
+  dataset_dir: DEPRECATED data/METR-LA
+  graph_pkl_filename: DEPRECATED data/sensor_graph/adj_mx.pkl
+  test_batch_size: DEPRECATED 64
+model:
+  cl_decay_steps: 2000
+  exclude_zeros_in_metric: true
+  filter_type: dual_random_walk
+  horizon: 12
+  input_dim: 2
+  l1_decay: 0
+  max_diffusion_step: 2
+  num_nodes: 207
+  num_rnn_layers: 2
+  output_dim: 1
+  rnn_units: 64
+  seq_len: 12
+  use_curriculum_learning: true
+train:
+  base_lr: 0.01
+  dropout: 0
+  epoch: 64
+  epochs: 65
+  epsilon: 0.001
+  global_step: 24375
+  log_dir: metr-la_data/model
+  lr_decay_ratio: 0.1
+  max_grad_norm: 5
+  max_to_keep: 100
+  min_learning_rate: 2.0e-06
+  model_filename: DEPRECATED data/model/pretrained/METR-LA/models-2.7422-24375
+  optimizer: adam
+  patience: 50
+  steps:
+  - 20
+  - 30
+  - 40
+  - 50
+  test_every_n_epochs: 1
