@@ -35,8 +35,8 @@ from model.dcrnn_supervisor import DCRNNSupervisor
 
 
 def generate_graph_seq2seq_io_data(arr2d,
-                                   history_timesteps,
-                                   future_timesteps,
+                                   seq_len,
+                                   horizon,
                                    time_in_day_arr1d,
                                    day_of_week_arr1d,
                                    add_time_in_day,
@@ -45,8 +45,8 @@ def generate_graph_seq2seq_io_data(arr2d,
                                    val_timesteps
                                    ):
 
-    x_offsets = np.arange(-history_timesteps + 1, 1, 1)
-    y_offsets = np.arange(1, future_timesteps + 1, 1)
+    x_offsets = np.arange(-seq_len + 1, 1, 1)
+    y_offsets = np.arange(1, horizon + 1, 1)
 
     num_samples, num_nodes = arr2d.shape
     data = np.expand_dims(arr2d, axis=-1)
@@ -107,19 +107,19 @@ def generate_graph_seq2seq_io_data(arr2d,
 
 
 def setup_dataloader(arr3d,
-                     history_timesteps,
-                     future_timesteps,
+                     seq_len,
+                     horizon,
                      test_samples,
                      val_samples,
                      train_batch_size,
                      test_batch_size,
                      scale,
-                    ):
+                     ):
 
     assert test_samples >= 1
     assert val_samples >= 0
 
-    timesteps_per_sample = (history_timesteps + future_timesteps)
+    timesteps_per_sample = (seq_len + horizon)
 
     test_timesteps = test_samples - 1 + timesteps_per_sample
     val_timesteps = val_samples - 1 + timesteps_per_sample if val_samples > 0 else 0
@@ -161,19 +161,19 @@ def setup_dataloader(arr3d,
 
     dataloaders = {}
     dataloaders['test_loader'] = SpatioTemporalDataLoader(test_z_arr3d, test_batch_size,
-                                                   history_timesteps,
-                                                   future_timesteps,
-                                                   shuffle=False)
+                                                          seq_len,
+                                                          horizon,
+                                                          shuffle=False)
     assert dataloaders['test_loader'].num_batch > 0, 'num_batch for test dataset should be > 0'
 
     dataloaders['val_loader'] = SpatioTemporalDataLoader(val_z_arr3d, test_batch_size,
-                                                  history_timesteps,
-                                                  future_timesteps,
-                                                  shuffle=False)
+                                                         seq_len,
+                                                         horizon,
+                                                         shuffle=False)
     dataloaders['train_loader'] = SpatioTemporalDataLoader(train_z_arr3d, train_batch_size,
-                                                    history_timesteps,
-                                                    future_timesteps,
-                                                    shuffle=True)
+                                                           seq_len,
+                                                           horizon,
+                                                           shuffle=True)
 
     dataloaders['scaler'] = scaler
     print('train # batches:', dataloaders['train_loader'].num_batch)
@@ -185,8 +185,8 @@ def setup_dataloader(arr3d,
 
 class SpatioTemporalDataLoader(object):
     def __init__(self, arr3d, batch_size,
-                 history_timesteps,
-                 future_timesteps,
+                 seq_len,
+                 horizon,
                  shuffle=False,
                  pad_with_last_sample=False):
         """
@@ -195,17 +195,17 @@ class SpatioTemporalDataLoader(object):
         :param batch_size:
         :param pad_with_last_sample: pad with the last sample to make number of samples divisible to batch_size.
         """
-        self.history_timesteps = history_timesteps
-        self.future_timesteps = future_timesteps
+        self.seq_len = seq_len
+        self.horizon = horizon
         self.batch_size = batch_size
         self.current_ind = 0
-        self.size = max((arr3d.shape[0] - (history_timesteps + future_timesteps) + 1), 0)
+        self.size = max((arr3d.shape[0] - (seq_len + horizon) + 1), 0)
         remainder = (self.size % batch_size)
         if pad_with_last_sample:
             num_padding = (batch_size - remainder)
             x_padding = np.repeat(arr3d[-1:], num_padding, axis=0)
             arr3d = np.concatenate([arr3d, x_padding], axis=0)
-            self.size = arr3d.shape[0] - (history_timesteps + future_timesteps)
+            self.size = arr3d.shape[0] - (seq_len + horizon)
         else:
             # drop first
             arr3d = arr3d[remainder:]
@@ -239,8 +239,8 @@ class SpatioTemporalDataLoader(object):
                 x_i, y_i = [], []
                 for _ in range(self.batch_size):
                     i = sample_index_list.pop()
-                    hist_i = i + self.history_timesteps
-                    future_i = hist_i + self.future_timesteps
+                    hist_i = i + self.seq_len
+                    future_i = hist_i + self.horizon
                     x_i.append(self.arr3d[i:hist_i])
                     y_i.append(self.arr3d[hist_i:future_i])
                 x_i = np.stack(x_i)
@@ -294,14 +294,14 @@ def generate_train_val_test(args):
 
     # assert (args.timestamp_latest is None) or (args.day_hour_min_latest is None)
     if args.day_hour_min_latest:
-        print('Exclude future samples after future_timesteps since day_hour_min_latest is specified as: \n',
+        print('Exclude future samples after horizon since day_hour_min_latest is specified as: \n',
               args.day_hour_min_latest)
         d, h, m = [int(e) for e in args.day_hour_min_latest.split('_')]
         args.datetime_latest = args.datetime_start + \
             pd.Timedelta(d-1, unit='d') + pd.Timedelta(h, unit='h') + pd.Timedelta(m, unit='m')
 
     elif args.timestamp_latest:
-        print('Exclude future samples after future_timesteps since timestamp_latest is specified as: \n',
+        print('Exclude future samples after horizon since timestamp_latest is specified as: \n',
               args.timestamp_latest)
         args.datetime_latest = datetime.strptime(args.timestamp_latest, "%Y-%m-%dT%H:%M:%S")
 
@@ -311,7 +311,7 @@ def generate_train_val_test(args):
     print('The latest datetime (timestamp "T"): ', args.datetime_latest)
 
     args.datetime_future_start = args.datetime_latest + timestep_size
-    args.datetime_future_end = args.datetime_latest + args.future_timesteps * timestep_size
+    args.datetime_future_end = args.datetime_latest + args.horizon * timestep_size
 
     d_df = pd.DataFrame()
     d_df['timestamp'] = pd.date_range(start=args.datetime_start, end=args.datetime_future_end,
@@ -319,13 +319,13 @@ def generate_train_val_test(args):
     d_df = d_df.set_index('timestamp')
     df = pd.merge(d_df, df, how='left', left_index=True, right_index=True)
 
-    # df = df.loc[:(args.datetime_latest + args.future_timesteps * timestep_size)]  # Note: .loc is inclusive
+    # df = df.loc[:(args.datetime_latest + args.horizon * timestep_size)]  # Note: .loc is inclusive
 
     # Keep timestamp info to output final prediction table
     # args.datetime_max = df.index.values[-1]
     # print('The maximum of datetime: ', args.datetime_max)
     # args.datetime_latest = args.datetime_max - \
-    #                         args.future_timesteps * timestep_size
+    #                         args.horizon * timestep_size
 
     arr2d = df.values
     time_in_day_arr1d = (df.index.values - df.index.values.astype("datetime64[D]")) / \
@@ -351,8 +351,8 @@ def generate_train_val_test(args):
     if STDATALOADER:
         dataloaders = setup_dataloader(
             arr3d,
-            history_timesteps=args.history_timesteps,
-            future_timesteps=args.future_timesteps,
+            seq_len=args.seq_len,
+            horizon=args.horizon,
             test_samples=args.test_samples,
             val_samples=args.val_samples,
             train_batch_size=args.train_batch_size,
@@ -365,8 +365,8 @@ def generate_train_val_test(args):
         x_train, y_train, x_val, y_val, x_test, y_test, x_offsets, y_offsets = \
             generate_graph_seq2seq_io_data(
                 arr2d,
-                history_timesteps=args.history_timesteps,
-                future_timesteps=args.future_timesteps,
+                seq_len=args.seq_len,
+                horizon=args.horizon,
                 time_in_day_arr1d=time_in_day_arr1d,
                 day_of_week_arr1d=day_of_week_arr1d,
                 add_time_in_day=args.add_time_in_day,
@@ -425,9 +425,12 @@ def get_model_filename(dir):
 
 
 def run_dcrnn(args, dataloaders, adj_mx):
-    tf.reset_default_graph()
+
     with open(args.config_filename) as f:
         config = yaml.load(f)
+    model_filename = get_model_filename(args.model_dir)
+
+    tf.reset_default_graph()
     tf_config = tf.ConfigProto()
     if args.use_cpu_only:
         tf_config = tf.ConfigProto(device_count={'GPU': 0})
@@ -436,7 +439,6 @@ def run_dcrnn(args, dataloaders, adj_mx):
     with tf.Session(config=tf_config) as sess:
         supervisor = DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **config)
         # supervisor.load(sess, config['train']['model_filename'])
-        model_filename = get_model_filename(args.model_dir)
         supervisor.load(sess, model_filename)
         outputs = supervisor.evaluate(sess)
         np.savez_compressed(args.output_filename, **outputs)
@@ -470,9 +472,9 @@ if __name__ == "__main__":
     # parser.add_argument("--output_dir", type=str, default="data/METR-LA",
     #                     help="Output directory.",)
 
-    parser.add_argument("--history_timesteps", type=int, default=12,
+    parser.add_argument("--seq_len", type=int, default=12,
                         help="timesteps to use as model input.",)
-    parser.add_argument("--future_timesteps", type=int, default=12,
+    parser.add_argument("--horizon", type=int, default=12,
                         help="timesteps to predict by the model.",)
 
     parser.add_argument("--test_samples", type=int, default=1,
