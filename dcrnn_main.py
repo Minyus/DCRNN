@@ -419,7 +419,7 @@ def run_dcrnn(args, dataloaders, adj_mx):
     tf_config.gpu_options.allow_growth = True
 
     with tf.Session(config=tf_config) as sess:
-        supervisor = DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **config)
+        supervisor = DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **args)
         # supervisor.load(sess, config['train']['model_filename'])
         supervisor.load(sess, model_filename)
         outputs = supervisor.evaluate(sess)
@@ -439,15 +439,18 @@ class DotDict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
-if __name__ == "__main__":
-    sys.path.append(os.getcwd())
-    config_file = 'dcrnn_config.yaml'
+def read_yaml(config_file='dcrnn_config.yaml'):
     with open(config_file) as f:
         config = yaml.load(f)
 
     args = DotDict({})
     args.update(config)
+    return args
 
+
+if __name__ == "__main__":
+    sys.path.append(os.getcwd())
+    args = read_yaml('dcrnn_config.yaml')
     dataloaders = generate_train_val_test(args)
     adj_mx = get_adj_mat(args)
     if not args.test_only:
