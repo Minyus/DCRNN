@@ -3,32 +3,16 @@ from __future__ import division
 from __future__ import print_function
 from __future__ import unicode_literals
 
-import argparse
-from datetime import datetime
-
-import numpy as np
+import sys
 import os
-import pandas as pd
+import random
+from datetime import datetime
 from pathlib import Path
 
-
-import argparse
 import numpy as np
-import os
-import sys
-import tensorflow as tf
+import pandas as pd
 import yaml
-import random
-
-from lib.utils import load_graph_data
-from model.dcrnn_supervisor import DCRNNSupervisor
-
-
-
-
-import argparse
 import tensorflow as tf
-import yaml
 
 from lib.utils import load_graph_data
 from model.dcrnn_supervisor import DCRNNSupervisor
@@ -457,72 +441,12 @@ class DotDict(dict):
 
 if __name__ == "__main__":
     sys.path.append(os.getcwd())
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument('--config_filename', default='metr-la_data/config/config.yaml', type=str,
-                        help='Config file for modeling.')
-
-    # parser.add_argument("--test_only", type=bool, default=True,
-    #                     help="Skip training",)
-    #
-    # parser.add_argument("--traffic_df_filename", type=str, default="metr-la_data/source_table/metr-la.csv",
-    #                     help="source traffic data.",)
-    # parser.add_argument("--adj_mat_filename", type=str, default="metr-la_data/adj_mat/adj_mx.csv",
-    #                     help="Graph adjacency matrix.",)
-    # parser.add_argument("--model_dir", type=str, default="metr-la_data/model",
-    #                     help="model directory.",)
-    #
-    # parser.add_argument('--output_filename', default='metr-la_data/output/dcrnn_predictions.npz')
-    #
-    # parser.add_argument('--pred_arr2d_file', default='metr-la_data/output/dcrnn_pred_arr2d.csv')
-    #
-    #
-    # parser.add_argument("--seq_len", type=int, default=12,
-    #                     help="timesteps to use as model input.",)
-    # parser.add_argument("--horizon", type=int, default=12,
-    #                     help="timesteps to predict by the model.",)
-    #
-    # parser.add_argument("--test_samples", type=int, default=1,
-    #                     help="timesteps for test.",)
-    # parser.add_argument("--val_samples", type=int, default=0,
-    #                     help="timesteps for validation. "
-    #                          "if 0, test dataset is used as validation.",)
-    #
-    # parser.add_argument('--test_batch_size', type=int, default=1,
-    #                     help="batch size for test and validation.")
-    # parser.add_argument('--train_batch_size', type=int, default=64)
-    #
-    # parser.add_argument("--add_time_in_day", type=bool, default=True,
-    #                     help="Add time in day to the model input dimensions.",)
-    # parser.add_argument("--add_day_of_week", type=bool, default=False,
-    #                     help="Add day of week to the model input dimensions.",)
-    # parser.add_argument("--timestep_size_in_min", type=int, default=5,
-    #                     help="Specify the timestep size in minutes.",)
-    #
-    # parser.add_argument("--day_hour_min_latest", type=str, default='1_18_55',
-    #                     help="day, hour, minute of the latest datetime in "
-    #                          "dd_hh_mm format e.g. 50_18_15 "
-    #                          "or empty string '' to use the latest date in the table data. ",)
-    # parser.add_argument("--timestamp_latest", type=str, default='',
-    #                     help="[ignored if day_hour_min_latest is provided.] "
-    #                          "The timestamp of the latest datetime in "
-    #                          "%Y-%m-%dT%H:%M:%S format e.g. '1970-02-15T18:00:00' "
-    #                          "or empty string '' to use the latest date in the table data. ",)
-    #
-    # parser.add_argument('--use_cpu_only', default=False, type=bool,
-    #                     help='Set to true to only use cpu.')
-    #
-    # parser.add_argument('--scale', type=bool, default=False)
-
-    args = parser.parse_args()
-
-    with open(args.config_filename) as f:
+    config_file = 'dcrnn_config.yaml'
+    with open(config_file) as f:
         config = yaml.load(f)
 
     args = DotDict({})
     args.update(config)
-    # for k, v in config.items():
-    #     args[k] = v
 
     dataloaders = generate_train_val_test(args)
     adj_mx = get_adj_mat(args)
