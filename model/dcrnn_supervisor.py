@@ -132,10 +132,15 @@ class DCRNNSupervisor(object):
             os.makedirs(log_dir)
         return log_dir
 
-    def run_epoch_generator(self, sess, model, data_generator, return_output=False, training=False, writer=None):
+    def run_epoch_generator(self, sess, model, data_generator,
+                            return_output=False,
+                            training=False, writer=None,
+                            return_ground_truth=False):
         losses = []
         maes = []
         outputs = []
+        ground_truths = []
+
         output_dim = self._model_kwargs.get('output_dim')
         preds = model.outputs
         labels = model.labels[..., :output_dim]
@@ -172,6 +177,9 @@ class DCRNNSupervisor(object):
                 writer.add_summary(vals['merged'], global_step=vals['global_step'])
             if return_output:
                 outputs.append(vals['outputs'])
+            if return_ground_truth:
+                ground_truths.append(y)
+
 
         results = {
             'loss': np.mean(losses),
@@ -179,6 +187,9 @@ class DCRNNSupervisor(object):
         }
         if return_output:
             results['outputs'] = outputs
+        if return_ground_truth:
+            results['ground_truths'] = ground_truths
+
         return results
 
     def get_lr(self, sess):
@@ -266,35 +277,41 @@ class DCRNNSupervisor(object):
         test_results = self.run_epoch_generator(sess, self._test_model,
                                                 self._data['test_loader'].get_iterator(),
                                                 return_output=True,
-                                                training=False)
+                                                training=False,
+                                                return_ground_truth=True)
 
-        # y_preds:  a list of (batch_size, horizon, num_nodes, output_dim)
-        test_loss, y_preds = test_results['loss'], test_results['outputs']
+
+        test_loss = test_results['loss']
         utils.add_simple_summary(self._writer, ['loss/test_loss'], [test_loss], global_step=global_step)
 
-        y_preds = np.concatenate(y_preds, axis=0)
+        # y_preds:  a list of (batch_size, horizon, num_nodes, output_dim)
+        y_preds = np.concatenate(test_results['outputs'], axis=0)
+
         scaler = self._data['scaler']
-        predictions = []
-        y_truths = []
 
         STDATALOADER = True
         if STDATALOADER:
-            test_generator = self._data['test_loader'].get_iterator()
-            x, y = test_generator.__next__()
+            # test_generator = self._data['test_loader'].get_iterator()
+            # _, y_truths = test_generator.__next__()
+            y_truths = np.concatenate(test_results['ground_truths'], axis=0)
         if not STDATALOADER:
-            y = self._data['y_test']
+            y_truths = self._data['y_test']
+
+        y_preds_original = []
+        y_truths_original = []
+
         # for horizon_i in range(self._data['y_test'].shape[1]):
-        for horizon_i in range(y.shape[1]):
+        for horizon_i in range(y_truths.shape[1]):
             # y_truth = scaler.inverse_transform(self._data['y_test'][:, horizon_i, :, 0])
-            y_truth = scaler.inverse_transform(y[:, horizon_i, :, 0])
-            y_truths.append(y_truth)
+            y_truth_original = scaler.inverse_transform(y_truths[:, horizon_i, :, 0])
+            y_truths_original.append(y_truth_original)
 
-            y_pred = scaler.inverse_transform(y_preds[:y_truth.shape[0], horizon_i, :, 0])
-            predictions.append(y_pred)
+            y_pred_original = scaler.inverse_transform(y_preds[:y_truth_original.shape[0], horizon_i, :, 0])
+            y_preds_original.append(y_pred_original)
 
-            mae = metrics.masked_mae_np(y_pred, y_truth, null_val=0)
-            mape = metrics.masked_mape_np(y_pred, y_truth, null_val=0)
-            rmse = metrics.masked_rmse_np(y_pred, y_truth, null_val=0)
+            mae = metrics.masked_mae_np(y_pred_original, y_truth_original, null_val=0)
+            mape = metrics.masked_mape_np(y_pred_original, y_truth_original, null_val=0)
+            rmse = metrics.masked_rmse_np(y_pred_original, y_truth_original, null_val=0)
             self._logger.info(
                 "Horizon {:02d}, MAE: {:.2f}, MAPE: {:.4f}, RMSE: {:.2f}".format(
                     horizon_i + 1, mae, mape, rmse
@@ -306,8 +323,8 @@ class DCRNNSupervisor(object):
                                      [rmse, mape, mae],
                                      global_step=global_step)
         outputs = {
-            'predictions': predictions,
-            'groundtruth': y_truths
+            'predictions': y_preds_original,
+            'groundtruth': y_truths_original
         }
         return outputs
 
