@@ -84,7 +84,7 @@ class DCRNNSupervisor(object):
         preds = self._train_model.outputs
         labels = self._train_model.labels[..., :output_dim]
 
-        null_val = 0.
+        null_val = 0. if kwargs['model'].get('exclude_zeros_in_metric', True) else np.nan
         self._loss_fn = masked_mae_loss(scaler, null_val)
         self._train_loss = self._loss_fn(preds=preds, labels=labels)
 
@@ -310,23 +310,26 @@ class DCRNNSupervisor(object):
             y_pred_original = scaler.inverse_transform(y_preds[:y_truth_original.shape[0], horizon_i, :, 0])
             y_preds_original.append(y_pred_original)
 
-            mae = metrics.masked_mae_np(y_pred_original, y_truth_original, null_val=0)
-            mape = metrics.masked_mape_np(y_pred_original, y_truth_original, null_val=0)
-            rmse = metrics.masked_rmse_np(y_pred_original, y_truth_original, null_val=0)
-            self._logger.info(
-                "Horizon {:02d}, MAE: {:.2f}, MAPE: {:.4f}, RMSE: {:.2f}".format(
-                    horizon_i + 1, mae, mape, rmse
+            for null_val in [0, np.nan]:
+                desc = r'0 excl.' if null_val == 0 else 'any    '
+                rmse = metrics.masked_rmse_np(y_pred_original, y_truth_original, null_val=null_val)
+                r2 = metrics.masked_r2_np(y_pred_original, y_truth_original, null_val=null_val)
+                mae = metrics.masked_mae_np(y_pred_original, y_truth_original, null_val=null_val)
+                mape = metrics.masked_mape_np(y_pred_original, y_truth_original, null_val=null_val) \
+                    if null_val == 0 else np.nan
+                self._logger.info(
+                    "| T + {:02d} | {} | RMSE: {:6.3f} | R2: {:7.3f} | MAE: {:5.2f} | MAPE: {:5.3f} |".\
+                        format(horizon_i + 1, desc, rmse, r2, mae, mape,)
                     )
-                )
 
-            y_truth_original = y_truth_original.reshape(-1)
-            y_pred_original = y_pred_original.reshape(-1)
-            rmse = np.sqrt(mean_squared_error(y_truth_original, y_pred_original))
-            mae = mean_absolute_error(y_truth_original, y_pred_original)
-            r2 = r2_score(y_truth_original, y_pred_original)
-            self._logger.info(
-                "[Including zeros] Horizon {:02d}, MAE: {:.2f}, R2: {:.6f}, RMSE: {:.2f}".\
-                    format(horizon_i + 1, mae, r2, rmse))
+            # y_truth_original = y_truth_original.reshape(-1)
+            # y_pred_original = y_pred_original.reshape(-1)
+            # rmse = np.sqrt(mean_squared_error(y_truth_original, y_pred_original))
+            # mae = mean_absolute_error(y_truth_original, y_pred_original)
+            # r2 = r2_score(y_truth_original, y_pred_original)
+            # self._logger.info(
+            #     "[Including zeros] Horizon {:02d}, MAE: {:.2f}, R2: {:.6f}, RMSE: {:.2f}".\
+            #         format(horizon_i + 1, mae, r2, rmse))
 
             utils.add_simple_summary(self._writer,
                                      ['%s_%d' % (item, horizon_i + 1) for item in

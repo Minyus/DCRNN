@@ -72,6 +72,12 @@ def masked_mse_np(preds, labels, null_val=np.nan):
         return np.mean(rmse)
 
 
+def masked_r2_np(preds, labels, null_val=np.nan):
+    res = masked_mse_np(preds=preds, labels=labels, null_val=null_val)
+    mean_preds = np.nanmean(labels[labels!=null_val]) * np.ones_like(labels)
+    tot = masked_mse_np(preds=mean_preds, labels=labels, null_val=null_val)
+    return 1 - res/tot
+
 def masked_mae_np(preds, labels, null_val=np.nan):
     with np.errstate(divide='ignore', invalid='ignore'):
         if np.isnan(null_val):
