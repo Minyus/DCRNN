@@ -15,6 +15,7 @@ from lib.metrics import masked_mae_loss
 
 from model.dcrnn_model import DCRNNModel
 
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 class DCRNNSupervisor(object):
     """
@@ -315,8 +316,18 @@ class DCRNNSupervisor(object):
             self._logger.info(
                 "Horizon {:02d}, MAE: {:.2f}, MAPE: {:.4f}, RMSE: {:.2f}".format(
                     horizon_i + 1, mae, mape, rmse
+                    )
                 )
-            )
+
+            y_truth_original = y_truth_original.reshape(-1)
+            y_pred_original = y_pred_original.reshape(-1)
+            rmse = np.sqrt(mean_squared_error(y_truth_original, y_pred_original))
+            mae = mean_absolute_error(y_truth_original, y_pred_original)
+            r2 = r2_score(y_truth_original, y_pred_original)
+            self._logger.info(
+                "[Including zeros] Horizon {:02d}, MAE: {:.2f}, R2: {:.6f}, RMSE: {:.2f}".\
+                    format(horizon_i + 1, mae, r2, rmse))
+
             utils.add_simple_summary(self._writer,
                                      ['%s_%d' % (item, horizon_i + 1) for item in
                                       ['metric/rmse', 'metric/mape', 'metric/mae']],
