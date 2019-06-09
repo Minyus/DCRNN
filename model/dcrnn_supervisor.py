@@ -165,7 +165,7 @@ class DCRNNSupervisor(object):
                 'outputs': model.outputs
             })
 
-        for _, (x, y) in enumerate(data_generator):
+        for batch_i, (x, y) in enumerate(data_generator):
             feed_dict = {
                 model.inputs: x,
                 model.labels: y,
@@ -181,7 +181,10 @@ class DCRNNSupervisor(object):
                 outputs.append(vals['outputs'])
             if return_ground_truth:
                 ground_truths.append(y)
+            self._logger.debug('Completed {} batch #: {:06d}'.\
+                               format('training' if training else 'evaluation', batch_i))
 
+        self._logger.debug('Completed an epoch.')
 
         results = {
             'loss': np.mean(losses),
@@ -224,6 +227,7 @@ class DCRNNSupervisor(object):
         self._logger.info('Start training ...')
 
         while self._epoch <= epochs:
+            self._logger.info('Started epoch: {} / {}'.format(self._epoch, epochs))
             # Learning rate schedule.
             new_lr = max(min_learning_rate, base_lr * (lr_decay_ratio ** np.sum(self._epoch >= np.array(steps))))
             self.set_lr(sess=sess, lr=new_lr)

@@ -392,9 +392,9 @@ def train_dcrnn(args, dataloaders, adj_mx):
     with tf.Session(config=tf_config) as sess:
         supervisor = \
             DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **args)
-        model_filename = args.paths['model_filename']
-        if model_filename:
-            supervisor.load(sess, model_filename)
+        # model_filename = args.paths['model_filename']
+        # if model_filename:
+        #     supervisor.load(sess, model_filename)
         supervisor.train(sess=sess)
 
 
