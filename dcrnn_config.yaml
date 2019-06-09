@@ -1,7 +1,7 @@
 latest_timepoint:
   day_hour_min_option:
-    set_day_hour_min: false
-    day: 1
+    set_day_hour_min: true
+    day: 100
     hour: 18
     min: 45
   timestamp_option:
@@ -22,7 +22,7 @@ data:
   train_batch_size: 64
   add_time_in_day: true
   add_day_of_week: false
-  scale: false
+  scale: true
 
 
 model:
