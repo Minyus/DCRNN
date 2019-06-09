@@ -273,26 +273,26 @@ def generate_train_val_test(args):
 
     timestep_size_freq = '{}min'.format(args.timestep_size_in_min)
     timestep_size = pd.Timedelta(args.timestep_size_in_min, unit='m')
-    traffic_df_path = Path(args.traffic_df_filename)
+    traffic_df_path = Path(args.paths['traffic_df_filename'])
     if traffic_df_path.suffix in ['.h5', '.hdf5']:
-        df = pd.read_hdf(args.traffic_df_filename)
+        df = pd.read_hdf(args.paths['traffic_df_filename'])
         df.index.name = 'timestamp'
         if not traffic_df_path.with_suffix('.csv').exists():
             df.to_csv(traffic_df_path.with_suffix('.csv').__str__(), sep=',')
     else:
         sep = ',' if traffic_df_path.suffix in ['.csv'] else ' '
         if args.timestep_size_in_min > 0:
-            df = pd.read_csv(args.traffic_df_filename, index_col=False, sep=sep)
+            df = pd.read_csv(args.paths['traffic_df_filename'], index_col=False, sep=sep)
             df['timestamp'] = \
                 pd.date_range(start='1970-01-01', periods=df.shape[0], freq=timestep_size_freq)
             df = df.set_index('timestamp')
         else:
-            df = pd.read_csv(args.traffic_df_filename, index_col=0, parse_dates=[0], sep=sep)
+            df = pd.read_csv(args.paths['traffic_df_filename'], index_col=0, parse_dates=[0], sep=sep)
 
     args.datetime_start = df.index.values[0]
     args.datetime_latest = get_datetime_latest(args)
     args.datetime_future_start = args.datetime_latest + timestep_size
-    args.datetime_future_end = args.datetime_latest + args.horizon * timestep_size
+    args.datetime_future_end = args.datetime_latest + args.model['horizon'] * timestep_size
 
     d_df = pd.DataFrame()
     d_df['timestamp'] = pd.date_range(start=args.datetime_start, end=args.datetime_future_end,
@@ -313,9 +313,9 @@ def generate_train_val_test(args):
     broadcast_last_dim(time_in_day_arr1d, arr2d.shape[-1])
 
     arr2d_list = [arr2d]
-    if args.add_time_in_day:
+    if args.data['add_time_in_day']:
         arr2d_list.append(broadcast_last_dim(time_in_day_arr1d, arr2d.shape[-1]))
-    if args.add_day_of_week:
+    if args.data['add_day_of_week']:
         arr2d_list.append(broadcast_last_dim(day_of_week_arr1d, arr2d.shape[-1]))
 
     arr3d = np.stack(arr2d_list, axis=-1)
@@ -324,13 +324,13 @@ def generate_train_val_test(args):
     if STDATALOADER:
         dataloaders = setup_dataloader(
             arr3d,
-            seq_len=args.seq_len,
-            horizon=args.horizon,
-            test_samples=args.test_samples,
-            val_samples=args.val_samples,
-            train_batch_size=args.train_batch_size,
-            test_batch_size=args.test_batch_size,
-            scale=args.scale,
+            seq_len=args.model['seq_len'],
+            horizon=args.model['horizon'],
+            test_samples=args.data['test_samples'],
+            val_samples=args.data['val_samples'],
+            train_batch_size=args.data['train_batch_size'],
+            test_batch_size=args.data['test_batch_size'],
+            scale=args.data['scale'],
             )
         return dataloaders
 
@@ -338,11 +338,11 @@ def generate_train_val_test(args):
         x_train, y_train, x_val, y_val, x_test, y_test, x_offsets, y_offsets = \
             generate_graph_seq2seq_io_data(
                 arr2d,
-                seq_len=args.seq_len,
-                horizon=args.horizon,
+                seq_len=args.model['seq_len'],
+                horizon=args.model['horizon'],
                 time_in_day_arr1d=time_in_day_arr1d,
                 day_of_week_arr1d=day_of_week_arr1d,
-                add_time_in_day=args.add_time_in_day,
+                add_time_in_day=args.data['add_time_in_day'],
                 add_day_in_week=args.add_day_in_week,
                 test_timesteps=args.test_timesteps,
                 val_timesteps=args.val_timesteps,
@@ -361,7 +361,7 @@ def generate_train_val_test(args):
         return None
 
 def get_adj_mat(args):
-    adj_mat_filename = args.adj_mat_filename
+    adj_mat_filename = args.paths['adj_mat_filename']
     if Path(adj_mat_filename).suffix in ['.pkl']:
         sensor_ids, sensor_id_to_ind, adj_mx = load_graph_data(adj_mat_filename)
     elif Path(adj_mat_filename).suffix in ['.csv']:
@@ -375,8 +375,8 @@ def train_dcrnn(args, dataloaders, adj_mx):
     tf.reset_default_graph()
     # with open(args.config_filename) as f:
     #     supervisor_config = yaml.load(f)
-    #     args['train']['log_dir'] = args.model_dir
-    #     args['data']['adj_mat_filename'] = args.adj_mat_filename
+    #     args['train']['log_dir'] = args.paths['model_dir']
+    #     args['data']['adj_mat_filename'] = args.paths['adj_mat_filename']
     if 1:
         tf_config = tf.ConfigProto()
         if args.use_cpu_only:
@@ -399,7 +399,7 @@ def get_model_filename(dir):
 
 def run_dcrnn(args, dataloaders, adj_mx):
 
-    model_filename = get_model_filename(args.model_dir)
+    model_filename = get_model_filename(args.paths['model_dir'])
 
     tf.reset_default_graph()
     tf_config = tf.ConfigProto()
@@ -412,14 +412,14 @@ def run_dcrnn(args, dataloaders, adj_mx):
         # supervisor.load(sess, config['train']['model_filename'])
         supervisor.load(sess, model_filename)
         outputs = supervisor.evaluate(sess)
-        np.savez_compressed(args.output_filename, **outputs)
-        print('Predictions saved as {}.'.format(args.output_filename))
+        np.savez_compressed(args.paths['output_filename'], **outputs)
+        print('Predictions saved as {}.'.format(args.paths['output_filename']))
 
-    pred = np.load(args.output_filename, allow_pickle=True)
+    pred = np.load(args.paths['output_filename'], allow_pickle=True)
     pred_tensor = pred['predictions']
     pred_arr2d = pred_tensor[:, -1, :]
 
-    np.savetxt(args.pred_arr2d_file, pred_arr2d, delimiter=',')
+    np.savetxt(args.paths['pred_arr2d_file'], pred_arr2d, delimiter=',')
 
 
 class DotDict(dict):
@@ -429,7 +429,7 @@ class DotDict(dict):
 
 def read_yaml(config_file):
     with open(config_file) as f:
-        config = yaml.load(f)
+        config = yaml.load(f, Loader=yaml.FullLoader)
     args = DotDict({})
     args.update(config)
     return args

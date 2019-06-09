@@ -107,9 +107,11 @@ class DCRNNSupervisor(object):
 
     @staticmethod
     def _get_log_dir(kwargs):
-        log_dir = kwargs['train'].get('log_dir')
-        if log_dir is None:
-            batch_size = kwargs['data'].get('batch_size')
+        # log_dir = kwargs['train'].get('log_dir')
+        log_dir = kwargs['paths']['model_dir']
+        # if log_dir is None:
+        if 0:
+            batch_size = kwargs['data'].get('train_batch_size')
             learning_rate = kwargs['train'].get('base_lr')
             max_diffusion_step = kwargs['model'].get('max_diffusion_step')
             num_rnn_layers = kwargs['model'].get('num_rnn_layers')
