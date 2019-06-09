@@ -27,6 +27,7 @@ class DCRNNSupervisor(object):
         self._data_kwargs = kwargs.get('data')
         self._model_kwargs = kwargs.get('model')
         self._train_kwargs = kwargs.get('train')
+        self._paths_kwargs = kwargs.get('paths')
 
         # logging.
         self._log_dir = self._get_log_dir(kwargs)
@@ -54,6 +55,14 @@ class DCRNNSupervisor(object):
                 self._train_model = DCRNNModel(is_training=True, scaler=scaler,
                                                batch_size=train_batch_size,
                                                adj_mx=adj_mx, **self._model_kwargs)
+
+        with tf.name_scope('Val'):
+            with tf.variable_scope('DCRNN', reuse=True):
+                val_batch_size = dataloaders['val_loader'].batch_size if STDATALOADER \
+                    else self._data_kwargs['val_batch_size']
+                self._val_model = DCRNNModel(is_training=False, scaler=scaler,
+                                              batch_size=val_batch_size,
+                                              adj_mx=adj_mx, **self._model_kwargs)
 
         with tf.name_scope('Test'):
             with tf.variable_scope('DCRNN', reuse=True):
@@ -94,8 +103,9 @@ class DCRNNSupervisor(object):
         global_step = tf.train.get_or_create_global_step()
         self._train_op = optimizer.apply_gradients(zip(grads, tvars), global_step=global_step, name='train_op')
 
-        max_to_keep = self._train_kwargs.get('max_to_keep', 100)
         self._epoch = 0
+
+        max_to_keep = self._train_kwargs.get('max_to_keep', 100)
         self._saver = tf.train.Saver(tf.global_variables(), max_to_keep=max_to_keep)
 
         # Log model statistics.
@@ -218,7 +228,7 @@ class DCRNNSupervisor(object):
 
         max_to_keep = train_kwargs.get('max_to_keep', 100)
         saver = tf.train.Saver(tf.global_variables(), max_to_keep=max_to_keep)
-        model_filename = train_kwargs.get('model_filename')
+        model_filename = self._paths_kwargs.get('model_filename')
         if model_filename is not None:
             saver.restore(sess, model_filename)
             self._epoch = epoch + 1
@@ -244,7 +254,7 @@ class DCRNNSupervisor(object):
 
             global_step = sess.run(tf.train.get_or_create_global_step())
             # Compute validation error.
-            val_results = self.run_epoch_generator(sess, self._test_model,
+            val_results = self.run_epoch_generator(sess, self._val_model,
                                                    self._data['val_loader'].get_iterator(),
                                                    training=False)
             val_loss, val_mae = np.asscalar(val_results['loss']), np.asscalar(val_results['mae'])

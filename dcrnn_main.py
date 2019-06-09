@@ -88,6 +88,7 @@ def setup_dataloader(arr3d,
                      test_samples,
                      val_samples,
                      train_batch_size,
+                     val_batch_size,
                      test_batch_size,
                      scale,
                      ):
@@ -102,8 +103,8 @@ def setup_dataloader(arr3d,
 
     assert test_samples >= test_batch_size, \
         'test_samples: {} | test_batch_size:{}'.format(test_samples, test_batch_size)
-    assert val_samples == 0 or val_samples >= test_batch_size, \
-        'val_samples: {} | test_batch_size:{}'.format(val_samples, test_batch_size)
+    assert val_samples == 0 or val_samples >= val_batch_size, \
+        'val_samples: {} | val_batch_size:{}'.format(val_samples, val_batch_size)
 
     if val_timesteps == 0:
         print('Test dataset will be used as validation dataset as well. '
@@ -139,7 +140,7 @@ def setup_dataloader(arr3d,
         SpatioTemporalDataLoader(test_z_arr3d, test_batch_size, seq_len, horizon, shuffle=False)
     assert dataloaders['test_loader'].num_batch > 0, 'num_batch for test dataset should be > 0'
     dataloaders['val_loader'] = \
-        SpatioTemporalDataLoader(val_z_arr3d, test_batch_size, seq_len, horizon, shuffle=False)
+        SpatioTemporalDataLoader(val_z_arr3d, val_batch_size, seq_len, horizon, shuffle=False)
     dataloaders['train_loader'] = \
         SpatioTemporalDataLoader(train_z_arr3d, train_batch_size, seq_len, horizon, shuffle=True)
 
@@ -320,6 +321,7 @@ def generate_train_val_test(args):
             test_samples=args.data['test_samples'],
             val_samples=args.data['val_samples'],
             train_batch_size=args.data['train_batch_size'],
+            val_batch_size=args.data['val_batch_size'],
             test_batch_size=args.data['test_batch_size'],
             scale=args.data['scale'],
             )

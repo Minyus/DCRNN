@@ -1,7 +1,7 @@
 latest_timepoint:
   day_hour_min_option:
     set_day_hour_min: true
-    day: 8
+    day: 2
     hour: 18
     min: 45
   timestamp_option:
@@ -17,8 +17,9 @@ paths:
 timestep_size_in_min: 5
 data:
   test_samples: 1
-  val_samples: 2016
+  val_samples: 96
   test_batch_size: 1
+  val_batch_size: 96
   train_batch_size: 64
   add_time_in_day: true
   add_day_of_week: false
