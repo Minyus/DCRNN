@@ -7,7 +7,7 @@ latest_timepoint:
   timestamp_option:
     set_timestamp: false
     timestamp:
-test_only: false
+test_only: true
 paths:
   traffic_df_filename: metr-la_data/source_table/metr-la.csv
   adj_mat_filename: metr-la_data/adj_mat/adj_mx.csv

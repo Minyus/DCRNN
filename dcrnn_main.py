@@ -411,9 +411,8 @@ def run_dcrnn(args, dataloaders, adj_mx):
             supervisor.load(sess, model_filename)
             outputs = supervisor.evaluate(sess)
         np.savez_compressed(args.paths['output_filename'], **outputs)
-        # pred = np.load(args.paths['output_filename'], allow_pickle=True)
-        pred = outputs
-        pred_tensor = pred['predictions']
+
+        pred_tensor = np.stack(outputs['predictions'])
         # pred_arr2d = pred_tensor[:, -1, :]
         pred_arr2d = pred_tensor[:, 0, :]
         np.savetxt(args.paths['pred_arr2d_filename'], pred_arr2d, delimiter=',')
