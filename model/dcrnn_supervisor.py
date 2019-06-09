@@ -15,7 +15,6 @@ from lib.metrics import masked_mae_loss
 
 from model.dcrnn_model import DCRNNModel
 
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
 class DCRNNSupervisor(object):
     """
@@ -294,50 +293,44 @@ class DCRNNSupervisor(object):
 
         STDATALOADER = True
         if STDATALOADER:
-            # test_generator = self._data['test_loader'].get_iterator()
-            # _, y_truths = test_generator.__next__()
             y_truths = np.concatenate(test_results['ground_truths'], axis=0)
         if not STDATALOADER:
             y_truths = self._data['y_test']
+
+        assert y_preds.shape[:3] == y_truths.shape[:3], \
+            'NOT {} == {}'.format(y_preds.shape[:3], y_truths.shape[:3])
 
         y_preds_original = []
         y_truths_original = []
 
         # for horizon_i in range(self._data['y_test'].shape[1]):
         for horizon_i in range(y_truths.shape[1]):
+            y_pred_original = scaler.inverse_transform(y_preds[:, horizon_i, :, 0])
+            y_preds_original.append(y_pred_original)
+
             # y_truth = scaler.inverse_transform(self._data['y_test'][:, horizon_i, :, 0])
             y_truth_original = scaler.inverse_transform(y_truths[:, horizon_i, :, 0])
             y_truths_original.append(y_truth_original)
 
-            y_pred_original = scaler.inverse_transform(y_preds[:y_truth_original.shape[0], horizon_i, :, 0])
-            y_preds_original.append(y_pred_original)
+            if not np.all(np.isnan(y_truth_original)):
 
-            for null_val in [0, np.nan]:
-                desc = r'0 excl.' if null_val == 0 else 'any    '
-                rmse = metrics.masked_rmse_np(y_pred_original, y_truth_original, null_val=null_val)
-                r2 = metrics.masked_r2_np(y_pred_original, y_truth_original, null_val=null_val)
-                mae = metrics.masked_mae_np(y_pred_original, y_truth_original, null_val=null_val)
-                mape = metrics.masked_mape_np(y_pred_original, y_truth_original, null_val=null_val) \
-                    if null_val == 0 else np.nan
-                self._logger.info(
-                    "| T + {:02d} | {} | RMSE: {:6.3f} | R2: {:7.3f} | MAE: {:5.2f} | MAPE: {:5.3f} |".\
-                        format(horizon_i + 1, desc, rmse, r2, mae, mape,)
-                    )
+                for null_val in [0, np.nan]:
+                    desc = r'0 excl.' if null_val == 0 else 'any    '
+                    rmse = metrics.masked_rmse_np(y_pred_original, y_truth_original, null_val=null_val)
+                    r2 = metrics.masked_r2_np(y_pred_original, y_truth_original, null_val=null_val)
+                    mae = metrics.masked_mae_np(y_pred_original, y_truth_original, null_val=null_val)
+                    mape = metrics.masked_mape_np(y_pred_original, y_truth_original, null_val=null_val) \
+                        if null_val == 0 else np.nan
+                    self._logger.info(
+                        "| T + {:02d} | {} | RMSE: {:6.3f} | R2: {:7.3f} | MAE: {:5.2f} | MAPE: {:5.3f} |".\
+                            format(horizon_i + 1, desc, rmse, r2, mae, mape,)
+                        )
 
-            # y_truth_original = y_truth_original.reshape(-1)
-            # y_pred_original = y_pred_original.reshape(-1)
-            # rmse = np.sqrt(mean_squared_error(y_truth_original, y_pred_original))
-            # mae = mean_absolute_error(y_truth_original, y_pred_original)
-            # r2 = r2_score(y_truth_original, y_pred_original)
-            # self._logger.info(
-            #     "[Including zeros] Horizon {:02d}, MAE: {:.2f}, R2: {:.6f}, RMSE: {:.2f}".\
-            #         format(horizon_i + 1, mae, r2, rmse))
-
-            utils.add_simple_summary(self._writer,
-                                     ['%s_%d' % (item, horizon_i + 1) for item in
-                                      ['metric/rmse', 'metric/mape', 'metric/mae']],
-                                     [rmse, mape, mae],
-                                     global_step=global_step)
+                utils.add_simple_summary(self._writer,
+                                         ['%s_%d' % (item, horizon_i + 1) for item in
+                                          ['metric/rmse', 'metric/mape', 'metric/mae']],
+                                         [rmse, mape, mae],
+                                         global_step=global_step)
         outputs = {
             'predictions': y_preds_original,
             'groundtruth': y_truths_original

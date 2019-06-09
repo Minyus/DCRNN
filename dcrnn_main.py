@@ -251,7 +251,7 @@ class StandardScaler:
     def inverse_transform(self, data):
         return (data * self.std) + self.mean if self.scale else data
 
-def get_datetime_latest(args):
+def get_datetime_latest(args, df):
     if args.latest_timepoint['day_hour_min_option']['set_day_hour_min']:
         d = args.latest_timepoint['day_hour_min_option']['day']
         h = args.latest_timepoint['day_hour_min_option']['hour']
@@ -290,7 +290,7 @@ def generate_train_val_test(args):
             df = pd.read_csv(args.paths['traffic_df_filename'], index_col=0, parse_dates=[0], sep=sep)
 
     args.datetime_start = df.index.values[0]
-    args.datetime_latest = get_datetime_latest(args)
+    args.datetime_latest = get_datetime_latest(args, df)
     args.datetime_future_start = args.datetime_latest + timestep_size
     args.datetime_future_end = args.datetime_latest + args.model['horizon'] * timestep_size
 
