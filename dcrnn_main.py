@@ -118,6 +118,7 @@ def setup_dataloader(arr3d,
               'To use separate validation dataset, increase val_timesteps. ')
 
     num_samples, num_nodes, _ = arr3d.shape
+    args.model['num_nodes'] = num_nodes
 
     num_test = test_timesteps if test_timesteps <= num_samples else num_samples
     num_val = val_timesteps if \
