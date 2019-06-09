@@ -1,26 +1,26 @@
 latest_timepoint:
   day_hour_min_option:
     set_day_hour_min: true
-    day: 2
+    day: 3
     hour: 18
     min: 45
   timestamp_option:
     set_timestamp: false
     timestamp:
-test_only: true
+test_only: false
 paths:
-  traffic_df_filename: metr-la_data/source_table/metr-la.csv
-  adj_mat_filename: metr-la_data/adj_mat/adj_mx.csv
-  model_dir: metr-la_data/model
-  output_filename: metr-la_data/output/dcrnn_predictions.npz
-  pred_arr2d_filename: metr-la_data/output/dcrnn_pred_arr2d.csv
-timestep_size_in_min: 5
+  traffic_df_filename: grab_data/source_table/history_tensor.txt
+  adj_mat_filename: grab_data/adj_mat/adj_mat.txt
+  model_dir: grab_data/model
+  output_filename: grab_data/output/dcrnn_predictions.npz
+  pred_arr2d_filename: grab_data/output/dcrnn_pred_arr2d.csv
+timestep_size_in_min: 15
 data:
   test_samples: 1
   val_samples: 96
   test_batch_size: 1
   val_batch_size: 96
-  train_batch_size: 64
+  train_batch_size: 96
   add_time_in_day: true
   add_day_of_week: false
   scale: true
@@ -30,7 +30,7 @@ model:
   cl_decay_steps: 2000
   exclude_zeros_in_metric: true
   filter_type: dual_random_walk
-  horizon: 12
+  horizon: 5
   l1_decay: 0
   max_diffusion_step: 2
   num_rnn_layers: 2
@@ -40,10 +40,9 @@ model:
 train:
   base_lr: 0.01
   dropout: 0
-  epoch: 64
-  epochs: 66
+  epoch: 0
+  epochs: 10
   epsilon: 0.001
-#  global_step: 24375
   lr_decay_ratio: 0.1
   max_grad_norm: 5
   max_to_keep: 100
