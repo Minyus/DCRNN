@@ -251,10 +251,25 @@ class StandardScaler:
     def inverse_transform(self, data):
         return (data * self.std) + self.mean if self.scale else data
 
+def get_datetime_latest(args):
+    if args.latest_timepoint['day_hour_min_option']['set_day_hour_min']:
+        d = args.latest_timepoint['day_hour_min_option']['day']
+        h = args.latest_timepoint['day_hour_min_option']['hour']
+        m = args.latest_timepoint['day_hour_min_option']['min']
+        datetime_latest = args.datetime_start + \
+                          pd.Timedelta(d - 1, unit='d') + pd.Timedelta(h, unit='h') + pd.Timedelta(m, unit='m')
+        print('The latest timepoint ("T") was set to day {:02d} {:02d}:{:02d}'.format(d, h, m))
+    elif args.latest_timepoint['timestamp_option']['set_timestamp']:
+        ts = args.latest_timepoint['timestamp_option']['timestamp']
+        datetime_latest = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S")
+        print('The latest timepoint ("T") was set to {}'.format(ts))
+    else:
+        datetime_latest = df.index.values[-1]
+        print('The latest datetime (timestamp "T"): ', datetime_latest)
+    return datetime_latest
 
 def generate_train_val_test(args):
-    print("Converting data from 2d of (epoch_timesteps, num_nodes) \n"
-          "to 4d of (epoch_timesteps, model_timesteps, num_nodes, dimension).")
+    print("Preprocessing data...")
 
     timestep_size_freq = '{}min'.format(args.timestep_size_in_min)
     timestep_size = pd.Timedelta(args.timestep_size_in_min, unit='m')
@@ -275,25 +290,7 @@ def generate_train_val_test(args):
             df = pd.read_csv(args.traffic_df_filename, index_col=0, parse_dates=[0], sep=sep)
 
     args.datetime_start = df.index.values[0]
-
-    # assert (args.timestamp_latest is None) or (args.day_hour_min_latest is None)
-    if args.day_hour_min_latest:
-        print('Exclude future samples after horizon since day_hour_min_latest is specified as: \n',
-              args.day_hour_min_latest)
-        d, h, m = [int(e) for e in args.day_hour_min_latest.split('_')]
-        args.datetime_latest = args.datetime_start + \
-            pd.Timedelta(d-1, unit='d') + pd.Timedelta(h, unit='h') + pd.Timedelta(m, unit='m')
-
-    elif args.timestamp_latest:
-        print('Exclude future samples after horizon since timestamp_latest is specified as: \n',
-              args.timestamp_latest)
-        args.datetime_latest = datetime.strptime(args.timestamp_latest, "%Y-%m-%dT%H:%M:%S")
-
-    else:
-        args.datetime_latest = df.index.values[-1]
-
-    print('The latest datetime (timestamp "T"): ', args.datetime_latest)
-
+    args.datetime_latest = get_datetime_latest(args)
     args.datetime_future_start = args.datetime_latest + timestep_size
     args.datetime_future_end = args.datetime_latest + args.horizon * timestep_size
 
@@ -302,14 +299,6 @@ def generate_train_val_test(args):
                                       freq=timestep_size_freq) # Note: end is inclusive.
     d_df = d_df.set_index('timestamp')
     df = pd.merge(d_df, df, how='left', left_index=True, right_index=True)
-
-    # df = df.loc[:(args.datetime_latest + args.horizon * timestep_size)]  # Note: .loc is inclusive
-
-    # Keep timestamp info to output final prediction table
-    # args.datetime_max = df.index.values[-1]
-    # print('The maximum of datetime: ', args.datetime_max)
-    # args.datetime_latest = args.datetime_max - \
-    #                         args.horizon * timestep_size
 
     arr2d = df.values
     time_in_day_arr1d = (df.index.values - df.index.values.astype("datetime64[D]")) / \
@@ -434,15 +423,13 @@ def run_dcrnn(args, dataloaders, adj_mx):
 
 
 class DotDict(dict):
-    """dot.notation access to dictionary attributes"""
     __getattr__ = dict.get
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
-def read_yaml(config_file='dcrnn_config.yaml'):
+def read_yaml(config_file):
     with open(config_file) as f:
         config = yaml.load(f)
-
     args = DotDict({})
     args.update(config)
     return args
