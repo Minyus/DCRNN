@@ -118,7 +118,6 @@ def setup_dataloader(arr3d,
               'To use separate validation dataset, increase val_timesteps. ')
 
     num_samples, num_nodes, _ = arr3d.shape
-    args.model['num_nodes'] = num_nodes
 
     num_test = test_timesteps if test_timesteps <= num_samples else num_samples
     num_val = val_timesteps if \
@@ -320,6 +319,10 @@ def generate_train_val_test(args):
         arr2d_list.append(broadcast_last_dim(day_of_week_arr1d, arr2d.shape[-1]))
 
     arr3d = np.stack(arr2d_list, axis=-1)
+    num_samples, num_nodes, input_dim = arr3d.shape
+    args.model['num_nodes'] = num_nodes
+    args.model['input_dim'] = input_dim
+    args.model['output_dim'] = 1
 
     STDATALOADER = True
     if STDATALOADER:
@@ -333,7 +336,7 @@ def generate_train_val_test(args):
             test_batch_size=args.data['test_batch_size'],
             scale=args.data['scale'],
             )
-        return dataloaders
+        return dataloaders, args
 
     if not STDATALOADER:
         x_train, y_train, x_val, y_val, x_test, y_test, x_offsets, y_offsets = \
@@ -359,7 +362,7 @@ def generate_train_val_test(args):
                 x_offsets=x_offsets.reshape(list(x_offsets.shape) + [1]),
                 y_offsets=y_offsets.reshape(list(y_offsets.shape) + [1]),
             )
-        return None
+        return None, args
 
 def get_adj_mat(args):
     adj_mat_filename = args.paths['adj_mat_filename']
@@ -439,7 +442,7 @@ def read_yaml(config_file):
 if __name__ == "__main__":
     sys.path.append(os.getcwd())
     args = read_yaml('dcrnn_config.yaml')
-    dataloaders = generate_train_val_test(args)
+    dataloaders, args = generate_train_val_test(args)
     adj_mx = get_adj_mat(args)
     if not args.test_only:
         train_dcrnn(args, dataloaders, adj_mx)

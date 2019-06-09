@@ -23,19 +23,19 @@ data:
   add_time_in_day: true
   add_day_of_week: false
   scale: false
-#  adj_mat_filename: metr-la_data/adj_mat/adj_mx.csv
+
 
 model:
   cl_decay_steps: 2000
   exclude_zeros_in_metric: true
   filter_type: dual_random_walk
   horizon: 12
-  input_dim: 2
+#  input_dim: 2
   l1_decay: 0
   max_diffusion_step: 2
 #  num_nodes: 207
   num_rnn_layers: 2
-  output_dim: 1
+#  output_dim: 1
   rnn_units: 64
   seq_len: 12
   use_curriculum_learning: true
