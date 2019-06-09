@@ -49,12 +49,6 @@ def generate_graph_seq2seq_io_data(arr2d,
     min_t = abs(min(x_offsets))
     max_t = abs(num_samples - abs(max(y_offsets)))  # Exclusive
 
-    # x, y = [], []
-    # for t in range(min_t, max_t):
-    #     x_t = data[t + x_offsets, ...]
-    #     y_t = data[t + y_offsets, ...]
-    #     x.append(x_t)
-    #     y.append(y_t)
     x = [data[t + x_offsets, ...] for t in range(min_t, max_t)]
     y = [data[t + y_offsets, ...] for t in range(min_t, max_t)]
 
@@ -66,8 +60,6 @@ def generate_graph_seq2seq_io_data(arr2d,
 
     print("history (model_input): ", x.shape, " | future (model_output): ", y.shape)
     # Write the data into npz file.
-    # num_test = 6831, using the last 6831 examples as testing.
-    # for the rest: 7/8 is used for training, and 1/8 is used for validation.
     num_samples = x.shape[0]
 
     num_test = test_timesteps if test_timesteps <= num_samples else num_samples
@@ -123,7 +115,6 @@ def setup_dataloader(arr3d,
     num_val = val_timesteps if \
         (test_timesteps + val_timesteps) <= num_samples else 0
     num_train = num_samples - num_test - num_val
-    print(' num_train: {} \n num_val: {} \n num_test: {}'.format(num_train, num_val, num_test))
 
     test_arr3d = arr3d[-num_test:]
     val_arr3d = arr3d[num_train: num_train + num_val] if num_val > 0 else test_arr3d
@@ -144,25 +135,21 @@ def setup_dataloader(arr3d,
     test_z_arr3d[:, :, 0] = scaler.transform(test_arr2d)
 
     dataloaders = {}
-    dataloaders['test_loader'] = SpatioTemporalDataLoader(test_z_arr3d, test_batch_size,
-                                                          seq_len,
-                                                          horizon,
-                                                          shuffle=False)
+    dataloaders['test_loader'] = \
+        SpatioTemporalDataLoader(test_z_arr3d, test_batch_size, seq_len, horizon, shuffle=False)
     assert dataloaders['test_loader'].num_batch > 0, 'num_batch for test dataset should be > 0'
-
-    dataloaders['val_loader'] = SpatioTemporalDataLoader(val_z_arr3d, test_batch_size,
-                                                         seq_len,
-                                                         horizon,
-                                                         shuffle=False)
-    dataloaders['train_loader'] = SpatioTemporalDataLoader(train_z_arr3d, train_batch_size,
-                                                           seq_len,
-                                                           horizon,
-                                                           shuffle=True)
+    dataloaders['val_loader'] = \
+        SpatioTemporalDataLoader(val_z_arr3d, test_batch_size, seq_len, horizon, shuffle=False)
+    dataloaders['train_loader'] = \
+        SpatioTemporalDataLoader(train_z_arr3d, train_batch_size, seq_len, horizon, shuffle=True)
 
     dataloaders['scaler'] = scaler
-    print('train # batches:', dataloaders['train_loader'].num_batch)
-    print('val # batches:', dataloaders['val_loader'].num_batch)
-    print('test # batches:', dataloaders['test_loader'].num_batch)
+    print('[train]      | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
+          format(num_train, dataloaders['train_loader'].size, dataloaders['train_loader'].num_batch))
+    print('[validation] | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
+          format(num_val, dataloaders['val_loader'].size, dataloaders['val_loader'].num_batch))
+    print('[test]       | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
+          format(num_test, dataloaders['test_loader'].size, dataloaders['test_loader'].num_batch))
 
     return dataloaders
 
@@ -375,55 +362,63 @@ def get_adj_mat(args):
     return adj_mx
 
 
-def train_dcrnn(args, dataloaders, adj_mx):
-    tf.reset_default_graph()
-    # with open(args.config_filename) as f:
-    #     supervisor_config = yaml.load(f)
-    #     args['train']['log_dir'] = args.paths['model_dir']
-    #     args['data']['adj_mat_filename'] = args.paths['adj_mat_filename']
-    if 1:
-        tf_config = tf.ConfigProto()
-        if args.use_cpu_only:
-            tf_config = tf.ConfigProto(device_count={'GPU': 0})
-        tf_config.gpu_options.allow_growth = True
-        with tf.Session(config=tf_config) as sess:
-            supervisor = DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders,
-                                         **args)
-
-            supervisor.train(sess=sess)
-
-
-def get_model_filename(dir):
+def get_model_filename(args):
+    dir = args.paths['model_dir']
     path_list = list(Path(dir).glob('*.index'))
-    serial = max([int(p.stem.split('-')[-1]) for p in path_list]).__str__()
-    path = list(Path(dir).glob('*' + serial + '.index'))[0]
-    model_filename = (path.parent / path.stem).as_posix()
-    return model_filename
+    if path_list:
+        global_step = max([int(p.stem.split('-')[-1]) for p in path_list]).__str__()
+        path = list(Path(dir).glob('*' + global_step + '.index'))[0]
+        model_filename = (path.parent / path.stem).as_posix()
+    else:
+        model_filename = None
+        global_step = 0
+    args.train['global_step'] = global_step
+    args.paths['model_filename'] = model_filename
+    return args
 
 
-def run_dcrnn(args, dataloaders, adj_mx):
-
-    model_filename = get_model_filename(args.paths['model_dir'])
-
+def setup_tf(args):
     tf.reset_default_graph()
     tf_config = tf.ConfigProto()
     if args.use_cpu_only:
         tf_config = tf.ConfigProto(device_count={'GPU': 0})
     tf_config.gpu_options.allow_growth = True
+    return tf_config
 
+
+def train_dcrnn(args, dataloaders, adj_mx):
+    args = get_model_filename(args)
+    tf_config = setup_tf(args)
     with tf.Session(config=tf_config) as sess:
-        supervisor = DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **args)
-        # supervisor.load(sess, config['train']['model_filename'])
-        supervisor.load(sess, model_filename)
-        outputs = supervisor.evaluate(sess)
+        supervisor = \
+            DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **args)
+        model_filename = args.paths['model_filename']
+        if model_filename:
+            supervisor.load(sess, model_filename)
+        supervisor.train(sess=sess)
+
+
+def run_dcrnn(args, dataloaders, adj_mx):
+    args = get_model_filename(args)
+    model_filename = args.paths['model_filename']
+    if model_filename:
+        tf_config = setup_tf(args)
+        with tf.Session(config=tf_config) as sess:
+            supervisor = \
+                DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **args)
+            supervisor.load(sess, model_filename)
+            outputs = supervisor.evaluate(sess)
         np.savez_compressed(args.paths['output_filename'], **outputs)
-        print('Predictions saved as {}.'.format(args.paths['output_filename']))
-
-    pred = np.load(args.paths['output_filename'], allow_pickle=True)
-    pred_tensor = pred['predictions']
-    pred_arr2d = pred_tensor[:, -1, :]
-
-    np.savetxt(args.paths['pred_arr2d_file'], pred_arr2d, delimiter=',')
+        # pred = np.load(args.paths['output_filename'], allow_pickle=True)
+        pred = outputs
+        pred_tensor = pred['predictions']
+        # pred_arr2d = pred_tensor[:, -1, :]
+        pred_arr2d = pred_tensor[:, 0, :]
+        np.savetxt(args.paths['pred_arr2d_filename'], pred_arr2d, delimiter=',')
+        print('Predictions saved as {}.'.format(args.paths['pred_arr2d_filename']))
+    else:
+        print('Pretrained model was not found in the directory: {}'.\
+              format(args.paths['model_dir']))
 
 
 class DotDict(dict):
