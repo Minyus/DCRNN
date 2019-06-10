@@ -8,6 +8,7 @@ import os
 import random
 from datetime import datetime
 from pathlib import Path
+from pprint import pprint
 
 import numpy as np
 import pandas as pd
@@ -16,7 +17,7 @@ import tensorflow as tf
 
 from lib.utils import load_graph_data
 from model.dcrnn_supervisor import DCRNNSupervisor
-
+from lib.preprocess import preprocess
 
 def generate_graph_seq2seq_io_data(arr2d,
                                    seq_len,
@@ -256,26 +257,28 @@ def get_datetime_latest(args, df):
         print('The latest datetime (timestamp "T"): ', datetime_latest)
     return datetime_latest
 
-def generate_train_val_test(args):
-    print("Preprocessing data...")
+
+def generate_train_val_test(args, df=None):
 
     timestep_size_freq = '{}min'.format(args.timestep_size_in_min)
     timestep_size = pd.Timedelta(args.timestep_size_in_min, unit='m')
-    traffic_df_path = Path(args.paths['traffic_df_filename'])
-    if traffic_df_path.suffix in ['.h5', '.hdf5']:
-        df = pd.read_hdf(args.paths['traffic_df_filename'])
-        df.index.name = 'timestamp'
-        if not traffic_df_path.with_suffix('.csv').exists():
-            df.to_csv(traffic_df_path.with_suffix('.csv').__str__(), sep=',')
-    else:
-        sep = ',' if traffic_df_path.suffix in ['.csv'] else ' '
-        if args.timestep_size_in_min > 0:
-            df = pd.read_csv(args.paths['traffic_df_filename'], index_col=False, sep=sep)
-            df['timestamp'] = \
-                pd.date_range(start='1970-01-01', periods=df.shape[0], freq=timestep_size_freq)
-            df = df.set_index('timestamp')
+
+    if df is None:
+        traffic_df_path = Path(args.paths['traffic_df_filename'])
+        if traffic_df_path.suffix in ['.h5', '.hdf5']:
+            df = pd.read_hdf(args.paths['traffic_df_filename'])
+            df.index.name = 'timestamp'
+            if not traffic_df_path.with_suffix('.csv').exists():
+                df.to_csv(traffic_df_path.with_suffix('.csv').__str__(), sep=',')
         else:
-            df = pd.read_csv(args.paths['traffic_df_filename'], index_col=0, parse_dates=[0], sep=sep)
+            sep = ',' if traffic_df_path.suffix in ['.csv'] else ' '
+            if args.timestep_size_in_min > 0:
+                df = pd.read_csv(args.paths['traffic_df_filename'], index_col=False, sep=sep)
+                df['timestamp'] = \
+                    pd.date_range(start='1970-01-01', periods=df.shape[0], freq=timestep_size_freq)
+                df = df.set_index('timestamp')
+            else:
+                df = pd.read_csv(args.paths['traffic_df_filename'], index_col=0, parse_dates=[0], sep=sep)
 
     args.datetime_start = df.index.values[0]
     args.datetime_latest = get_datetime_latest(args, df)
@@ -353,14 +356,15 @@ def generate_train_val_test(args):
             )
         return None, args
 
-def get_adj_mat(args):
-    adj_mat_filename = args.paths['adj_mat_filename']
-    if Path(adj_mat_filename).suffix in ['.pkl']:
-        sensor_ids, sensor_id_to_ind, adj_mx = load_graph_data(adj_mat_filename)
-    elif Path(adj_mat_filename).suffix in ['.csv']:
-        adj_mx = np.loadtxt(adj_mat_filename, dtype=np.float32, delimiter=',')
-    else:
-        adj_mx = np.loadtxt(adj_mat_filename, dtype=np.float32, delimiter=' ')
+def get_adj_mat(args, adj_mx=None):
+    if adj_mx is None:
+        adj_mat_filename = args.paths['adj_mat_filename']
+        if Path(adj_mat_filename).suffix in ['.pkl']:
+            sensor_ids, sensor_id_to_ind, adj_mx = load_graph_data(adj_mat_filename)
+        elif Path(adj_mat_filename).suffix in ['.csv']:
+            adj_mx = np.loadtxt(adj_mat_filename, dtype=np.float32, delimiter=',')
+        else:
+            adj_mx = np.loadtxt(adj_mat_filename, dtype=np.float32, delimiter=' ')
     return adj_mx
 
 
@@ -389,15 +393,16 @@ def setup_tf(args):
 
 
 def train_dcrnn(args, dataloaders, adj_mx):
-    args = get_model_filename(args)
-    tf_config = setup_tf(args)
-    with tf.Session(config=tf_config) as sess:
-        supervisor = \
-            DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **args)
-        # model_filename = args.paths['model_filename']
-        # if model_filename:
-        #     supervisor.load(sess, model_filename)
-        supervisor.train(sess=sess)
+    if not args.test_only:
+        args = get_model_filename(args)
+        tf_config = setup_tf(args)
+        with tf.Session(config=tf_config) as sess:
+            supervisor = \
+                DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **args)
+            # model_filename = args.paths['model_filename']
+            # if model_filename:
+            #     supervisor.load(sess, model_filename)
+            supervisor.train(sess=sess)
 
 
 def run_dcrnn(args, dataloaders, adj_mx):
@@ -427,30 +432,21 @@ class DotDict(dict):
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
-def read_yaml(config_file):
+def read_yaml(config_file, show=True):
     with open(config_file) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     args = DotDict({})
     args.update(config)
+    if show:
+        pprint(args)
     return args
 
 
 if __name__ == "__main__":
     sys.path.append(os.getcwd())
     args = read_yaml('dcrnn_config.yaml')
-    dataloaders, args = generate_train_val_test(args)
-    adj_mx = get_adj_mat(args)
-    if not args.test_only:
-        train_dcrnn(args, dataloaders, adj_mx)
+    st_df, adj_mx = preprocess(args)
+    dataloaders, args = generate_train_val_test(args, st_df)
+    adj_mx = get_adj_mat(args, adj_mx)
+    train_dcrnn(args, dataloaders, adj_mx)
     run_dcrnn(args, dataloaders, adj_mx)
-
-
-
-
-
-
-
-
-
-
-

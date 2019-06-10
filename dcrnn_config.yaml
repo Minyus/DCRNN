@@ -13,7 +13,7 @@ paths:
   geohash6_filename: grab_data/intermediate/geohash6.csv
   distances_filename: grab_data/intermediate/distances.csv
   traffic_df_filename: grab_data/intermediate/spatiotemporal_df.csv
-  adj_mat_filename: grab_data/intermediate/adj_mat.txt
+  adj_mat_filename: grab_data/intermediate/adj_mat.csv
   model_dir: grab_data/model
   output_filename: grab_data/intermediate/dcrnn_predictions.npz
   pred_arr2d_filename: grab_data/intermediate/dcrnn_pred_arr2d.csv
@@ -44,7 +44,7 @@ train:
   base_lr: 0.01
   dropout: 0
   epoch: 0
-  epochs: 10
+  epochs: 3
   epsilon: 0.001
   lr_decay_ratio: 0.1
   max_grad_norm: 5

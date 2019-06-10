@@ -1,4 +1,6 @@
-#%%
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
 
 import geohash
@@ -52,7 +54,7 @@ def get_dist_df(geo_df):
 
 #%%
 
-def get_spatiotemporal_df(s_df):
+def get_spatiotemporal_df(s_df, args, node_ids=None):
 
     def get_datetime(x):
         dt = datetime(1970, 1, 1) + \
@@ -66,6 +68,10 @@ def get_spatiotemporal_df(s_df):
 
     wide_df = s_df.pivot(index='datetime', columns='geohash6', values='demand')
 
+    if node_ids is not None:
+        # Make sure the column order is as in the adjacency matrix
+        wide_df = wide_df[node_ids]
+
     timestep_size_freq = '{}min'.format(args.timestep_size_in_min)
     dt_df = pd.DataFrame()
     dt_df.loc[:,'datetime'] = pd.date_range(start=s_df['datetime'].min(), end=s_df['datetime'].max(),
@@ -73,28 +79,95 @@ def get_spatiotemporal_df(s_df):
     dt_df.set_index('datetime',inplace=True)
 
     st_df = pd.merge(dt_df, wide_df, how='left', left_index=True, right_index=True)
+
+    st_df.fillna(0.0, inplace=True)
+
     st_df.index.name = 'timestamp'
 
     return st_df
 
+
+def get_adjacency_matrix(distance_df, sensor_ids, normalized_k=0.1):
+    """
+
+    :param distance_df: data frame with three columns: [from, to, distance].
+    :param sensor_ids: list of sensor ids.
+    :param normalized_k: entries that become lower than normalized_k after normalization are set to zero for sparsity.
+    :return:
+    """
+    num_sensors = len(sensor_ids)
+    dist_mx = np.zeros((num_sensors, num_sensors), dtype=np.float32)
+    dist_mx[:] = np.inf
+    # Builds sensor id to index map.
+    sensor_id_to_ind = {}
+    for i, sensor_id in enumerate(sensor_ids):
+        sensor_id_to_ind[sensor_id] = i
+
+    # Fills cells in the matrix with distances.
+    for row in distance_df.values:
+        if row[0] not in sensor_id_to_ind or row[1] not in sensor_id_to_ind:
+            continue
+        dist_mx[sensor_id_to_ind[row[0]], sensor_id_to_ind[row[1]]] = row[2]
+
+    # Calculates the standard deviation as theta.
+    distances = dist_mx[~np.isinf(dist_mx)].flatten()
+    std = distances.std()
+    adj_mx = np.exp(-np.square(dist_mx / std))
+    # Make the adjacent matrix symmetric by taking the max.
+    # adj_mx = np.maximum.reduce([adj_mx, adj_mx.T])
+
+    # Sets entries that lower than a threshold, i.e., k, to zero for sparsity.
+    adj_mx[adj_mx < normalized_k] = 0
+    return sensor_ids, sensor_id_to_ind, adj_mx
+
+
 #%%
+
+def preprocess(args):
+    need_st_flag = not Path(args.paths['traffic_df_filename']).exists()
+    need_adj_flag = not Path(args.paths['adj_mat_filename']).exists()
+
+    if need_st_flag or need_adj_flag:
+        source_table_dir = Path(args.paths.get('source_table_dir'))
+        source_table_filename = source_table_dir.glob('*.csv').__next__()
+        s_df = pd.read_csv(source_table_filename)
+        if 1:
+            s_df = s_df[0:100]
+
+    adj_mx = None
+    node_ids = None
+    if need_adj_flag:
+        ##%% Prepare for adjacency matrix
+        geo_df = get_geo_df(s_df)
+        node_ids = geo_df['geohash6'].values
+        with open(args.paths.get('geohash6_filename'), 'w') as f:
+            f.write(','.join(node_ids))
+        dist_df = get_dist_df(geo_df)
+        dist_df.to_csv(args.paths.get('distances_filename'), index=False)
+
+        # with open(args.paths.get('geohash6_filename')) as f:
+        #     sensor_ids = f.read().strip().split(',')
+        sensor_ids = node_ids
+
+        # distance_df = pd.read_csv(args.distances_filename, dtype={'from': 'str', 'to': 'str'})
+        distance_df = dist_df
+
+        _, sensor_id_to_ind, adj_mx = get_adjacency_matrix(distance_df, sensor_ids)
+
+        # Save to pickle file.
+        # with open(args.output_pkl_filename, 'wb') as f:
+        #     pickle.dump([sensor_ids, sensor_id_to_ind, adj_mx], f, protocol=2)
+
+        np.savetxt(args.paths['adj_mat_filename'], adj_mx, delimiter=',')
+
+    st_df = None
+    if need_st_flag:
+        ##%% Get Spatio-temporal df
+        st_df = get_spatiotemporal_df(s_df, args, node_ids)
+        st_df.to_csv(args.paths['traffic_df_filename'])
+
+    return st_df, adj_mx
 
 if __name__ == '__main__':
     args = read_yaml('dcrnn_config.yaml')
-    source_table_dir = Path(args.paths.get('source_table_dir'))
-    source_table_filename = source_table_dir.glob('*.csv').__next__()
-    s_df = pd.read_csv(source_table_filename)
-    if 1:
-        s_df = s_df[0:100]
-
-    ##%% Get Spatio-temporal df
-    st_df = get_spatiotemporal_df(s_df)
-    st_df.to_csv(args.paths['traffic_df_filename'])
-
-    ##%% Prepare for adjacency matrix
-    geo_df = get_geo_df(s_df)
-    with open(args.paths.get('geohash6_filename'), 'w') as f:
-        f.write(','.join(geo_df['geohash6'].values))
-    dist_df = get_dist_df(geo_df)
-    dist_df.to_csv(args.paths.get('distances_filename'), index=False)
-
+    st_df, adj_mx = preprocess(args)
