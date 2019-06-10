@@ -9,11 +9,14 @@ latest_timepoint:
     timestamp:
 test_only: false
 paths:
-  traffic_df_filename: grab_data/source_table/history_tensor.txt
-  adj_mat_filename: grab_data/adj_mat/adj_mat.txt
+  source_table_dir: grab_data/input/
+  geohash6_filename: grab_data/intermediate/geohash6.csv
+  distances_filename: grab_data/intermediate/distances.csv
+  traffic_df_filename: grab_data/intermediate/spatiotemporal_df.csv
+  adj_mat_filename: grab_data/intermediate/adj_mat.txt
   model_dir: grab_data/model
-  output_filename: grab_data/output/dcrnn_predictions.npz
-  pred_arr2d_filename: grab_data/output/dcrnn_pred_arr2d.csv
+  output_filename: grab_data/intermediate/dcrnn_predictions.npz
+  pred_arr2d_filename: grab_data/intermediate/dcrnn_pred_arr2d.csv
 timestep_size_in_min: 15
 data:
   test_samples: 1
