@@ -17,6 +17,7 @@ from geopy.distance import great_circle
 from lib import utils
 from lib.utils import load_graph_data
 
+
 class DotDict(dict):
     __getattr__ = dict.get
     __setattr__ = dict.__setitem__
@@ -86,27 +87,27 @@ def get_spatiotemporal_df(s_df, args, node_ids=None):
     return st_df
 
 
-def get_adjacency_matrix(distance_df, sensor_ids, normalized_k=0.1):
+def get_adjacency_matrix(distance_df, node_ids, normalized_k=0.1):
     """
 
     :param distance_df: data frame with three columns: [from, to, distance].
-    :param sensor_ids: list of sensor ids.
+    :param node_ids: list of node ids.
     :param normalized_k: entries that become lower than normalized_k after normalization are set to zero for sparsity.
     :return:
     """
-    num_sensors = len(sensor_ids)
-    dist_mx = np.zeros((num_sensors, num_sensors), dtype=np.float32)
+    num_nodes = len(node_ids)
+    dist_mx = np.zeros((num_nodes, num_nodes), dtype=np.float32)
     dist_mx[:] = np.inf
     # Builds sensor id to index map.
-    sensor_id_to_ind = {}
-    for i, sensor_id in enumerate(sensor_ids):
-        sensor_id_to_ind[sensor_id] = i
+    node_id_to_ind = {}
+    for i, node_id in enumerate(node_ids):
+        node_id_to_ind[node_id] = i
 
     # Fills cells in the matrix with distances.
     for row in distance_df.values:
-        if row[0] not in sensor_id_to_ind or row[1] not in sensor_id_to_ind:
+        if row[0] not in node_id_to_ind or row[1] not in node_id_to_ind:
             continue
-        dist_mx[sensor_id_to_ind[row[0]], sensor_id_to_ind[row[1]]] = row[2]
+        dist_mx[node_id_to_ind[row[0]], node_id_to_ind[row[1]]] = row[2]
 
     # Calculates the standard deviation as theta.
     distances = dist_mx[~np.isinf(dist_mx)].flatten()
@@ -117,7 +118,7 @@ def get_adjacency_matrix(distance_df, sensor_ids, normalized_k=0.1):
 
     # Sets entries that lower than a threshold, i.e., k, to zero for sparsity.
     adj_mx[adj_mx < normalized_k] = 0
-    return sensor_ids, sensor_id_to_ind, adj_mx
+    return node_ids, node_id_to_ind, adj_mx
 
 
 def get_adj_mat(args, adj_mx=None):
@@ -275,18 +276,14 @@ class SpatioTemporalDataLoader(object):
                  horizon,
                  shuffle=False,
                  pad_with_last_sample=False):
-        """
 
-        :param arr3d:
-        :param batch_size:
-        :param pad_with_last_sample: pad with the last sample to make number of samples divisible to batch_size.
-        """
         self.seq_len = seq_len
         self.horizon = horizon
         self.batch_size = batch_size
         self.current_ind = 0
         self.size = max((arr3d.shape[0] - (seq_len + horizon) + 1), 0)
         remainder = (self.size % batch_size)
+        # pad with the last sample to make number of samples divisible to batch_size.
         if pad_with_last_sample:
             num_padding = (batch_size - remainder)
             x_padding = np.repeat(arr3d[-1:], num_padding, axis=0)
@@ -443,7 +440,7 @@ def generate_train_val_test(args, df=None):
             test_batch_size=args.data['test_batch_size'],
             scale=args.data['scale'],
             )
-        return dataloaders, args
+        return args, dataloaders
 
     if not STDATALOADER:
         x_train, y_train, x_val, y_val, x_test, y_test, x_offsets, y_offsets = \
@@ -469,7 +466,7 @@ def generate_train_val_test(args, df=None):
                 x_offsets=x_offsets.reshape(list(x_offsets.shape) + [1]),
                 y_offsets=y_offsets.reshape(list(y_offsets.shape) + [1]),
             )
-        return None, args
+        return args, None
 
 
 def preprocess(args):
@@ -490,9 +487,6 @@ def preprocess(args):
             raise FileNotFoundError('directory: ' + args.paths.get('source_table_dir'))
         logger.info('Reading: {}'.format(source_table_filename))
         s_df = pd.read_csv(source_table_filename)
-        if 0: # TODO: remove
-            s_df = s_df.query('day <= 7')
-            logger.info('Data was limited for debugging!')
 
     adj_mx = None
     node_ids = None
@@ -534,13 +528,8 @@ def preprocess(args):
         st_df = get_spatiotemporal_df(s_df, args, node_ids)
         st_df.to_csv(args.paths['traffic_df_filename'])
         logger.info('Spatio-temporal dataframe was saved at: {}'.format(args.paths['traffic_df_filename']))
-    dataloaders, args = generate_train_val_test(args, st_df)
+
+    args, dataloaders = generate_train_val_test(args, st_df)
 
     logger.info('Completed preprocessing.')
-    return dataloaders, adj_mx, node_ids, args
-
-
-#%%
-if __name__ == '__main__':
-    args = read_yaml('dcrnn_config.yaml')
-    dataloaders, adj_mx, node_ids, args = preprocess(args)
+    return args, dataloaders, adj_mx, node_ids

@@ -8,6 +8,9 @@ import tensorflow as tf
 
 from scipy.sparse import linalg
 
+import yaml
+from pprint import pprint
+
 
 class DataLoader(object):
     def __init__(self, xs, ys, batch_size, pad_with_last_sample=True, shuffle=False):
@@ -210,3 +213,19 @@ def load_pickle(pickle_file):
         print('Unable to load data ', pickle_file, ':', e)
         raise
     return pickle_data
+
+
+class DotDict(dict):
+    __getattr__ = dict.get
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
+
+def read_yaml(config_file, show=True):
+    with open(config_file) as f:
+        config = yaml.load(f, Loader=yaml.FullLoader)
+    args = DotDict({})
+    args.update(config)
+    if show:
+        pprint(args)
+    return args
