@@ -59,8 +59,8 @@ def get_spatiotemporal_df(s_df, args, node_ids=None):
     def get_datetime(x):
         dt = datetime(1970, 1, 1) + \
             pd.Timedelta(x[0] - 1, unit='d') + \
-            pd.Timedelta(x[1].split(':')[0], unit='h') + \
-            pd.Timedelta(x[1].split(':')[1], unit='m')
+            pd.Timedelta(int(x[1].split(':')[0]), unit='h') + \
+            pd.Timedelta(int(x[1].split(':')[1]), unit='m')
         return dt
 
     s_df['datetime'] = \
@@ -131,8 +131,8 @@ def preprocess(args):
         source_table_dir = Path(args.paths.get('source_table_dir'))
         source_table_filename = source_table_dir.glob('*.csv').__next__()
         s_df = pd.read_csv(source_table_filename)
-        if 1:
-            s_df = s_df[0:100]
+        if 1: # TODO remove
+            s_df = s_df.query('day <= 7')
 
     adj_mx = None
     node_ids = None
