@@ -1,13 +1,13 @@
 latest_timepoint:
   day_hour_min_option:
     set_day_hour_min: true
-    day: 1
-    hour: 18
-    min: 45
+    day: 61
+    hour: 22
+    min: 30
   timestamp_option:
     set_timestamp: false
     timestamp:
-test_only: true
+test_only: false
 paths:
   source_table_dir: grab_data/input/
   geohash6_filename: grab_data/intermediate/geohash6.csv
@@ -22,13 +22,13 @@ paths:
 timestep_size_in_min: 15
 data:
   test_samples: 1
-  val_samples: 1
+  val_samples: 24
   test_batch_size: 1
   val_batch_size: 1
   train_batch_size: 1
   add_time_in_day: true
   add_day_of_week: false
-  scale: true
+  scale: false
 
 
 model:
@@ -40,13 +40,13 @@ model:
   max_diffusion_step: 2
   num_rnn_layers: 2
   rnn_units: 64
-  seq_len: 12
+  seq_len: 672
   use_curriculum_learning: true
 train:
   base_lr: 0.01
   dropout: 0
   epoch: 0
-  epochs: 1
+  epochs: 10000
   epsilon: 0.001
   lr_decay_ratio: 0.1
   max_grad_norm: 5
@@ -59,6 +59,8 @@ train:
   - 30
   - 40
   - 50
+  steps_per_epoch: 10
+  target_steps: 100
   test_every_n_epochs: 1
 use_cpu_only: false
 log_level: DEBUG

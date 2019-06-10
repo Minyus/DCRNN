@@ -73,7 +73,8 @@ class DCRNNSupervisor(object):
                                               adj_mx=adj_mx, **self._model_kwargs)
 
         # Learning rate.
-        self._lr = tf.get_variable('learning_rate', shape=(), initializer=tf.constant_initializer(0.01),
+        self._lr = tf.get_variable('learning_rate', shape=(),
+                                   initializer=tf.constant_initializer(0.01),
                                    trainable=False)
         self._new_lr = tf.placeholder(tf.float32, shape=(), name='new_learning_rate')
         self._lr_update = tf.assign(self._lr, self._new_lr, name='lr_update')
@@ -101,7 +102,8 @@ class DCRNNSupervisor(object):
         max_grad_norm = kwargs['train'].get('max_grad_norm', 1.)
         grads, _ = tf.clip_by_global_norm(grads, max_grad_norm)
         global_step = tf.train.get_or_create_global_step()
-        self._train_op = optimizer.apply_gradients(zip(grads, tvars), global_step=global_step, name='train_op')
+        self._train_op = optimizer.apply_gradients(zip(grads, tvars), global_step=global_step,
+                                                   name='train_op')
 
         self._epoch = 0
 
@@ -110,7 +112,8 @@ class DCRNNSupervisor(object):
 
         # Log model statistics.
         total_trainable_parameter = utils.get_total_trainable_parameter_size()
-        self._logger.info('Total number of trainable parameters: {:d}'.format(total_trainable_parameter))
+        self._logger.info('Total number of trainable parameters: {:d}'.\
+                          format(total_trainable_parameter))
         for var in tf.global_variables():
             self._logger.debug('{}, {}'.format(var.name, var.get_shape()))
 
@@ -118,8 +121,9 @@ class DCRNNSupervisor(object):
     def _get_log_dir(kwargs):
         # log_dir = kwargs['train'].get('log_dir')
         log_dir = kwargs['paths']['model_dir']
+
+        if 0: # TODO: remove
         # if log_dir is None:
-        if 0:
             batch_size = kwargs['data'].get('train_batch_size')
             learning_rate = kwargs['train'].get('base_lr')
             max_diffusion_step = kwargs['model'].get('max_diffusion_step')
@@ -140,6 +144,7 @@ class DCRNNSupervisor(object):
                 time.strftime('%m%d%H%M%S'))
             base_dir = kwargs.get('base_dir')
             log_dir = os.path.join(base_dir, run_id)
+
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
         return log_dir
@@ -159,7 +164,7 @@ class DCRNNSupervisor(object):
         loss = self._loss_fn(preds=preds, labels=labels)
         fetches = {
             'loss': loss,
-            'mae': loss, # TODO: mae?
+            'mae': loss, # TODO:
             'global_step': tf.train.get_or_create_global_step()
         }
         if training:
@@ -175,7 +180,7 @@ class DCRNNSupervisor(object):
                 'outputs': model.outputs
             })
 
-        for batch_i, (x, y) in enumerate(data_generator):
+        for step_i, (x, y) in enumerate(data_generator):
             feed_dict = {
                 model.inputs: x,
                 model.labels: y,
@@ -191,10 +196,13 @@ class DCRNNSupervisor(object):
                 outputs.append(vals['outputs'])
             if return_ground_truth:
                 ground_truths.append(y)
-            self._logger.debug('Completed {} batch #: {:06d}'.\
-                               format('training' if training else 'evaluation', batch_i))
-
-        self._logger.debug('Completed an epoch.')
+            self._logger.debug('Completed {} step #: {:06d} | global step: {:06d}'.\
+                               format('training' if training else 'evaluation', step_i,
+                                      vals['global_step']))
+            if step_i + 1 >= self._train_kwargs.get('steps_per_epoch', 1000000):
+                break
+            if vals['global_step'] >= self._train_kwargs.get('target_steps', 1000000):
+                break
 
         results = {
             'loss': np.mean(losses),
@@ -239,7 +247,8 @@ class DCRNNSupervisor(object):
         while self._epoch <= epochs:
             self._logger.info('Started epoch: {} / {}'.format(self._epoch, epochs))
             # Learning rate schedule.
-            new_lr = max(min_learning_rate, base_lr * (lr_decay_ratio ** np.sum(self._epoch >= np.array(steps))))
+            new_lr = max(min_learning_rate,
+                         base_lr * (lr_decay_ratio ** np.sum(self._epoch >= np.array(steps))))
             self.set_lr(sess=sess, lr=new_lr)
 
             start_time = time.time()
@@ -260,11 +269,15 @@ class DCRNNSupervisor(object):
             val_loss, val_mae = np.asscalar(val_results['loss']), np.asscalar(val_results['mae'])
 
             utils.add_simple_summary(self._writer,
-                                     ['loss/train_loss', 'metric/train_mae', 'loss/val_loss', 'metric/val_mae'],
-                                     [train_loss, train_mae, val_loss, val_mae], global_step=global_step)
+                                     ['loss/train_loss', 'metric/train_mae', 'loss/val_loss',
+                                      'metric/val_mae'],
+                                     [train_loss, train_mae, val_loss, val_mae],
+                                     global_step=global_step)
             end_time = time.time()
-            message = 'Epoch [{}/{}] ({}) train_mae: {:.4f}, val_mae: {:.4f} lr:{:.6f} {:.1f}s'.format(
-                self._epoch, epochs, global_step, train_mae, val_mae, new_lr, (end_time - start_time))
+            message = \
+                'Epoch: {}/{}|Global Step: {}|train_mae: {:.4f}|val_mae: {:.4f}|lr:{:.6f}|{:.1f}s'.\
+                format(self._epoch, epochs, global_step, train_mae, val_mae, new_lr,
+                       (end_time - start_time))
             self._logger.info(message)
             if self._epoch % test_every_n_epochs == test_every_n_epochs - 1:
                 self.evaluate(sess)
@@ -273,7 +286,8 @@ class DCRNNSupervisor(object):
                 if save_model > 0:
                     model_filename = self.save(sess, val_loss)
                 self._logger.info(
-                    'Val loss decrease from %.4f to %.4f, saving to %s' % (min_val_loss, val_loss, model_filename))
+                    'Val loss decrease from %.4f to %.4f, saved to %s' % \
+                    (min_val_loss, val_loss, model_filename))
                 min_val_loss = val_loss
             else:
                 wait += 1
@@ -286,6 +300,10 @@ class DCRNNSupervisor(object):
             self._epoch += 1
 
             sys.stdout.flush()
+            if global_step >= self._train_kwargs.get('target_steps', 1000000):
+                self._logger.info('Finish training since the global step reached: {}'.\
+                                  format(global_step))
+                break
         return np.min(history)
 
     def evaluate(self, sess, **kwargs):
@@ -298,7 +316,8 @@ class DCRNNSupervisor(object):
 
 
         test_loss = test_results['loss']
-        utils.add_simple_summary(self._writer, ['loss/test_loss'], [test_loss], global_step=global_step)
+        utils.add_simple_summary(self._writer, ['loss/test_loss'], [test_loss],
+                                 global_step=global_step)
 
         # y_preds:  a list of (batch_size, horizon, num_nodes, output_dim)
         y_preds = np.concatenate(test_results['outputs'], axis=0)
@@ -317,12 +336,10 @@ class DCRNNSupervisor(object):
         y_preds_original = []
         y_truths_original = []
 
-        # for horizon_i in range(self._data['y_test'].shape[1]):
         for horizon_i in range(y_truths.shape[1]):
             y_pred_original = scaler.inverse_transform(y_preds[:, horizon_i, :, 0])
             y_preds_original.append(y_pred_original)
 
-            # y_truth = scaler.inverse_transform(self._data['y_test'][:, horizon_i, :, 0])
             y_truth_original = scaler.inverse_transform(y_truths[:, horizon_i, :, 0])
             y_truths_original.append(y_truth_original)
 
@@ -336,7 +353,7 @@ class DCRNNSupervisor(object):
                     mape = metrics.masked_mape_np(y_pred_original, y_truth_original, null_val=null_val) \
                         if null_val == 0 else np.nan
                     self._logger.info(
-                        "| T + {:02d} | {} | RMSE: {:6.3f} | R2: {:7.3f} | MAE: {:5.2f} | MAPE: {:5.3f} |".\
+                        "T+{:02d}|{}|RMSE: {:8.5f}|R2: {:8.4f}|MAE: {:5.2f}|MAPE: {:5.3f}|".\
                             format(horizon_i + 1, desc, rmse, r2, mae, mape,)
                         )
 
@@ -363,14 +380,14 @@ class DCRNNSupervisor(object):
     def save(self, sess, val_loss):
         config = dict(self._kwargs)
         global_step = np.asscalar(sess.run(tf.train.get_or_create_global_step()))
-        prefix = os.path.join(self._log_dir, 'model-{:08.4f}'.format(val_loss))
+        prefix = os.path.join(self._log_dir, 'model-{:09.6f}'.format(val_loss))
         config['train']['epoch'] = self._epoch
         config['train']['global_step'] = global_step
         config['train']['log_dir'] = self._log_dir
         config['train']['model_filename'] = self._saver.save(sess, prefix,
                                                              global_step=global_step,
                                                              write_meta_graph=False)
-        config_filename = 'config_{}.yaml'.format(self._epoch)
+        config_filename = 'dcrnn_config_global_step_{}.yaml'.format(global_step)
         with open(os.path.join(self._log_dir, config_filename), 'w') as f:
             yaml.dump(config, f, default_flow_style=False)
         return config['train']['model_filename']
