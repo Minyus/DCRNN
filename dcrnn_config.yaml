@@ -18,6 +18,7 @@ paths:
   output_filename: grab_data/intermediate/dcrnn_predictions.npz
   pred_arr2d_filename: grab_data/intermediate/dcrnn_pred_arr2d.csv
   pred_df_filename: grab_data/intermediate/dcrnn_pred_df.csv
+  pred_long_filename: grab_data/output/dcrnn_pred_output.csv
 timestep_size_in_min: 15
 data:
   test_samples: 1

@@ -533,3 +533,15 @@ def preprocess(args):
 
     logger.info('Completed preprocessing.')
     return args, dataloaders, adj_mx, node_ids
+
+
+def transform_to_long(pred_df=None):
+    if pred_df is None:
+        pred_df = pd.read_csv(args.paths['pred_df_filename'], parse_dates=[0], index_col=0)
+    long_df = pd.DataFrame(pred_df.stack(), columns=['demand'])
+    long_df.reset_index(inplace=True)
+    long_df.loc[:, 'day'] = long_df['timestamp'].apply(lambda x: int((x - datetime(1970, 1, 1)).days) + 1)
+    long_df.loc[:, 'timestamp'] = long_df['timestamp'].apply(lambda x: x.strftime('%H:%M'))
+    long_df.rename(columns={'level_1': 'geohash6'}, inplace=True)
+    long_df = long_df[['geohash6', 'day', 'timestamp', 'demand']]
+    return long_df
