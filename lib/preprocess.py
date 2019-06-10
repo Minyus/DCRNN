@@ -11,6 +11,8 @@ import numpy as np
 from datetime import datetime
 from pathlib import Path
 
+from lib import utils
+
 #%%
 
 
@@ -124,19 +126,28 @@ def get_adjacency_matrix(distance_df, sensor_ids, normalized_k=0.1):
 #%%
 
 def preprocess(args):
+    logger = utils.get_logger(args.paths['model_dir'], __name__, level=args['log_level'])
+    logger.info('Started preprocessing...')
+
     need_st_flag = not Path(args.paths['traffic_df_filename']).exists()
     need_adj_flag = not Path(args.paths['adj_mat_filename']).exists()
 
     if need_st_flag or need_adj_flag:
+
         source_table_dir = Path(args.paths.get('source_table_dir'))
         source_table_filename = source_table_dir.glob('*.csv').__next__()
+        if not source_table_filename:
+            raise FileNotFoundError('directory: ' + args.paths.get('source_table_dir'))
+        logger.info('Reading: {}'.format(source_table_filename))
         s_df = pd.read_csv(source_table_filename)
-        if 1: # TODO remove
+        if 0: # TODO: remove
             s_df = s_df.query('day <= 7')
+            logger.info('Data was limited for debugging!')
 
     adj_mx = None
     node_ids = None
     if need_adj_flag:
+        logger.info('Preparing adjacency matrix...')
         ##%% Prepare for adjacency matrix
         geo_df = get_geo_df(s_df)
         node_ids = geo_df['geohash6'].values
@@ -159,13 +170,17 @@ def preprocess(args):
         #     pickle.dump([sensor_ids, sensor_id_to_ind, adj_mx], f, protocol=2)
 
         np.savetxt(args.paths['adj_mat_filename'], adj_mx, delimiter=',')
+        logger.info('Adjacency matrix was saved at: {}'.format(args.paths['adj_mat_filename']))
 
     st_df = None
     if need_st_flag:
+        logger.info('Preparing spatio-temporal dataframe...')
         ##%% Get Spatio-temporal df
         st_df = get_spatiotemporal_df(s_df, args, node_ids)
         st_df.to_csv(args.paths['traffic_df_filename'])
+        logger.info('Spatio-temporal dataframe was saved at: {}'.format(args.paths['traffic_df_filename']))
 
+    logger.info('Completed preprocessing.')
     return st_df, adj_mx
 
 if __name__ == '__main__':
