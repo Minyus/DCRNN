@@ -231,10 +231,10 @@ class DCRNNSupervisor(object):
         model_filename = self._paths_kwargs.get('model_filename')
         if model_filename is not None:
             saver.restore(sess, model_filename)
-            self._epoch = epoch + 1
         else:
             sess.run(tf.global_variables_initializer())
-        self._logger.info('Start training ...')
+
+        self._epoch = epoch + 1
 
         while self._epoch <= epochs:
             self._logger.info('Started epoch: {} / {}'.format(self._epoch, epochs))

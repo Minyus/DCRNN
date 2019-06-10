@@ -7,7 +7,7 @@ latest_timepoint:
   timestamp_option:
     set_timestamp: false
     timestamp:
-test_only: false
+test_only: true
 paths:
   source_table_dir: grab_data/input/
   geohash6_filename: grab_data/intermediate/geohash6.csv
@@ -17,6 +17,7 @@ paths:
   model_dir: grab_data/model
   output_filename: grab_data/intermediate/dcrnn_predictions.npz
   pred_arr2d_filename: grab_data/intermediate/dcrnn_pred_arr2d.csv
+  pred_df_filename: grab_data/intermediate/dcrnn_pred_df.csv
 timestep_size_in_min: 15
 data:
   test_samples: 1
