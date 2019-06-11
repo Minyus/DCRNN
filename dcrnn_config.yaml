@@ -30,6 +30,7 @@ data:
   add_day_of_week: false
   scale: false
 model:
+  activation: sigmoid
   cl_decay_steps: 2000
   exclude_zeros_in_metric: true
   filter_type: dual_random_walk
