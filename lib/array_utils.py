@@ -35,6 +35,20 @@ def partitioned_reduce_mean(arr, part_list=[1, 8, 96, 672], rest_to_one=True):
     return out_arr
 
 
+def ex_partitioned_reduce_mean(arr, index, part_size_list=[8, 96, 672, 568]):
+    size = sum(part_size_list)
+    assert arr.shape[0] >= size
+    arr = arr[index:index+size, ...]
+    part_list = [1] + part_size_list[:-1]
+    return partitioned_reduce_mean(arr, part_list)
+
+
+def get_seq_len(part_size_list):
+    seq_len = ex_partitioned_reduce_mean(np.arange(sum(part_size_list)), 0, part_size_list).shape[0]
+    return seq_len
+
+
+#%%
 if __name__ == '__main__':
     arr = np.arange(40)
     # arr = arr.reshape(10, 2, 2)
@@ -42,3 +56,17 @@ if __name__ == '__main__':
     arr = arr.reshape(40, 1, 1)
     reduced_arr = partitioned_reduce_mean(arr, [1, 2, 8])
     print(reduced_arr)
+
+#%%
+if __name__ == '__main__':
+    if 0:
+        arr = np.arange(40)
+        part_size_list=[2, 8, 30]
+    if 1:
+        arr = np.arange(1344)
+        part_size_list = [8, 96, 672, 568]
+    reduced_arr = ex_partitioned_reduce_mean(arr, 10, part_size_list)
+    print(reduced_arr)
+
+    seq_len = get_seq_len(part_size_list)
+    print(seq_len)

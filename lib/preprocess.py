@@ -16,7 +16,7 @@ from geopy.distance import great_circle
 
 from lib import utils
 from lib.utils import load_graph_data
-
+from lib.array_utils import get_seq_len, ex_partitioned_reduce_mean
 
 class DotDict(dict):
     __getattr__ = dict.get
@@ -211,7 +211,7 @@ def setup_dataloader(arr3d,
     assert test_samples >= 1
     assert val_samples >= 0
 
-    timesteps_per_sample = (seq_len + horizon)
+    timesteps_per_sample = (sum(seq_len) if isinstance(seq_len, list) else seq_len) + horizon
 
     test_timesteps = test_samples - 1 + timesteps_per_sample
     val_timesteps = val_samples - 1 + timesteps_per_sample if val_samples > 0 else 0
@@ -281,7 +281,8 @@ class SpatioTemporalDataLoader(object):
         self.horizon = horizon
         self.batch_size = batch_size
         self.current_ind = 0
-        self.size = max((arr3d.shape[0] - (seq_len + horizon) + 1), 0)
+        self.size = max((arr3d.shape[0] - \
+                         ((sum(seq_len) if isinstance(seq_len, list) else seq_len) + horizon) + 1), 0)
         remainder = (self.size % batch_size)
         # pad with the last sample to make number of samples divisible to batch_size.
         if pad_with_last_sample:
@@ -297,12 +298,8 @@ class SpatioTemporalDataLoader(object):
 
         self.size = self.num_batch * self.batch_size
 
-        # if shuffle:
-        #     permutation = np.random.permutation(self.size)
-        #     xs = xs[permutation]
         self.shuffle = shuffle
         self.arr3d = arr3d
-
 
     def get_iterator(self):
         self.current_ind = 0
@@ -316,19 +313,27 @@ class SpatioTemporalDataLoader(object):
 
         sample_index_list = range_list(self.size, shuffle=self.shuffle)
 
+        enable_seq_reducing = isinstance(self.seq_len, list)
+        seq_len = sum(self.seq_len) if enable_seq_reducing else self.seq_len
+
         def _wrapper():
             while self.current_ind < self.num_batch:
 
-                x_i, y_i = [], []
+                x_arr3d_list, y_arr3d_list = [], []
                 for _ in range(self.batch_size):
                     i = sample_index_list.pop()
-                    hist_i = i + self.seq_len
+
+                    hist_i = i + seq_len
+                    x_arr3d = ex_partitioned_reduce_mean(self.arr3d, i, part_size_list=self.seq_len) \
+                        if enable_seq_reducing \
+                        else self.arr3d[i:hist_i]
+                    x_arr3d_list.append(x_arr3d)
+
                     future_i = hist_i + self.horizon
-                    x_i.append(self.arr3d[i:hist_i])
-                    y_i.append(self.arr3d[hist_i:future_i])
-                x_i = np.stack(x_i)
-                y_i = np.stack(y_i)
-                yield (x_i, y_i)
+                    y_arr3d_list.append(self.arr3d[hist_i:future_i])
+                x_arr4d = np.stack(x_arr3d_list)
+                y_arr4d = np.stack(y_arr3d_list)
+                yield (x_arr4d, y_arr4d)
                 self.current_ind += 1
 
         return _wrapper()
@@ -351,8 +356,6 @@ class StandardScaler:
         return (data * self.std) + self.mean if self.scale else data
 
 
-
-
 def get_datetime_latest(args, df):
     if args.latest_timepoint['day_hour_min_option']['set_day_hour_min']:
         d = args.latest_timepoint['day_hour_min_option']['day']
@@ -369,7 +372,6 @@ def get_datetime_latest(args, df):
         datetime_latest = df.index.values[-1]
         print('The latest datetime (timestamp "T"): ', datetime_latest)
     return datetime_latest
-
 
 
 def generate_train_val_test(args, df=None):
@@ -429,9 +431,15 @@ def generate_train_val_test(args, df=None):
 
     STDATALOADER = True
     if STDATALOADER:
+        if args.model.get('seq_reducing') and \
+                args.model.get('seq_reducing').get('enable_seq_reducing', False):
+            seq_len = args.model.get('seq_reducing').get('seq_len_list')
+            args.model['seq_len'] = get_seq_len(seq_len)
+        else:
+            seq_len = args.model['seq_len']
         dataloaders = setup_dataloader(
             arr3d,
-            seq_len=args.model['seq_len'],
+            seq_len=seq_len,
             horizon=args.model['horizon'],
             test_samples=args.data['test_samples'],
             val_samples=args.data['val_samples'],
@@ -501,17 +509,16 @@ def preprocess(args):
         dist_df.to_csv(args.paths.get('distances_filename'), index=False)
 
         # with open(args.paths.get('geohash6_filename')) as f:
-        #     sensor_ids = f.read().strip().split(',')
-        sensor_ids = node_ids
+        #     node_ids = f.read().strip().split(',')
 
         # distance_df = pd.read_csv(args.distances_filename, dtype={'from': 'str', 'to': 'str'})
         distance_df = dist_df
 
-        _, sensor_id_to_ind, adj_mx = get_adjacency_matrix(distance_df, sensor_ids)
+        _, sensor_id_to_ind, adj_mx = get_adjacency_matrix(distance_df, node_ids)
 
         # Save to pickle file.
         # with open(args.output_pkl_filename, 'wb') as f:
-        #     pickle.dump([sensor_ids, sensor_id_to_ind, adj_mx], f, protocol=2)
+        #     pickle.dump([node_ids, sensor_id_to_ind, adj_mx], f, protocol=2)
 
         np.savetxt(args.paths['adj_mat_filename'], adj_mx, delimiter=',')
         logger.info('Adjacency matrix was saved at: {}'.format(args.paths['adj_mat_filename']))
@@ -524,7 +531,7 @@ def preprocess(args):
     st_df = None
     if need_st_flag:
         logger.info('Preparing spatio-temporal dataframe...')
-        ##%% Get Spatio-temporal df
+        # Get Spatio-temporal df
         st_df = get_spatiotemporal_df(s_df, args, node_ids)
         st_df.to_csv(args.paths['traffic_df_filename'])
         logger.info('Spatio-temporal dataframe was saved at: {}'.format(args.paths['traffic_df_filename']))
