@@ -197,7 +197,7 @@ class DCRNNSupervisor(object):
             if return_ground_truth:
                 ground_truths.append(y)
             self._logger.debug('Completed {} step #: {:06d} | global step: {:06d}'.\
-                               format('training' if training else 'evaluation', step_i,
+                               format('training' if training else 'evaluation', step_i + 1,
                                       vals['global_step']))
             if step_i + 1 >= self._train_kwargs.get('steps_per_epoch', 1000000):
                 break

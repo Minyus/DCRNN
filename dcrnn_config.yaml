@@ -59,8 +59,8 @@ train:
   - 30
   - 40
   - 50
-  steps_per_epoch: 10
+  steps_per_epoch: 1
   target_steps: 100
-  test_every_n_epochs: 1
+  test_every_n_epochs: 10
 use_cpu_only: false
 log_level: DEBUG
