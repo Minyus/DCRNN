@@ -478,7 +478,7 @@ def generate_train_val_test(args, df=None):
 
 
 def preprocess(args):
-    logger = utils.get_logger(args.paths['model_dir'], __name__, level=args['log_level'])
+    logger = utils.get_logger(args.paths['model_dir'], __name__, level=args.get('log_level', 'INFO'))
     logger.info('Started preprocessing...')
 
     args.timestep_size_freq = '{}min'.format(args.timestep_size_in_min)

@@ -23,8 +23,9 @@ class DCRNNModel(object):
         max_diffusion_step = int(model_kwargs.get('max_diffusion_step', 2))
         cl_decay_steps = int(model_kwargs.get('cl_decay_steps', 1000))
         filter_type = model_kwargs.get('filter_type', 'laplacian')
-        activation = {'tanh': tf.nn.tanh, 'sigmoid': tf.nn.sigmoid, 'relu': tf.nn.relu}.\
-            get(model_kwargs.get('activation', 'tanh'))
+        activation_dict = {'tanh': tf.nn.tanh, 'sigmoid': tf.nn.sigmoid, 'relu': tf.nn.relu}
+        activation = activation_dict.get(model_kwargs.get('activation', 'tanh'))
+        output_activation = activation_dict.get(model_kwargs.get('output_activation', 'tanh'))
         horizon = int(model_kwargs.get('horizon', 1))
         max_grad_norm = float(model_kwargs.get('max_grad_norm', 5.0))
         num_nodes = int(model_kwargs.get('num_nodes', 1))
@@ -46,7 +47,7 @@ class DCRNNModel(object):
         cell = DCGRUCell(rnn_units, adj_mx, max_diffusion_step=max_diffusion_step, num_nodes=num_nodes,
                          filter_type=filter_type, activation=activation)
         cell_with_projection = DCGRUCell(rnn_units, adj_mx, max_diffusion_step=max_diffusion_step, num_nodes=num_nodes,
-                                         num_proj=output_dim, filter_type=filter_type, activation=activation)
+                                         num_proj=output_dim, filter_type=filter_type, activation=output_activation)
         encoding_cells = [cell] * num_rnn_layers
         decoding_cells = [cell] * (num_rnn_layers - 1) + [cell_with_projection]
         encoding_cells = tf.contrib.rnn.MultiRNNCell(encoding_cells, state_is_tuple=True)

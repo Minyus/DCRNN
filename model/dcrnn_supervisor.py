@@ -339,11 +339,13 @@ class DCRNNSupervisor(object):
         for horizon_i in range(y_truths.shape[1]):
             y_pred_original = scaler.inverse_transform(y_preds[:, horizon_i, :, 0])
             y_preds_original.append(y_pred_original)
+            self._logger.info(stat_str(y_pred_original, horizon_i, 'pred'))
 
             y_truth_original = scaler.inverse_transform(y_truths[:, horizon_i, :, 0])
             y_truths_original.append(y_truth_original)
 
             if not np.all(np.isnan(y_truth_original)):
+                self._logger.info(stat_str(y_truth_original, horizon_i, 'true'))
 
                 for null_val in [0, np.nan]:
                     desc = r'0 excl.' if null_val == 0 else 'any    '
@@ -391,3 +393,9 @@ class DCRNNSupervisor(object):
         with open(os.path.join(self._log_dir, config_filename), 'w') as f:
             yaml.dump(config, f, default_flow_style=False)
         return config['train']['model_filename']
+
+
+def stat_str(arr, horizon_i, desc=''):
+    stat = 'T+{:02d}|{}|min: {:8.5f}|max: {:8.5f}|mean: {:8.5f}|std dev: {:8.5f}'. \
+        format(horizon_i + 1, desc, np.min(arr), np.max(arr), np.mean(arr), np.std(arr))
+    return stat

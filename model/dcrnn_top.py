@@ -50,6 +50,7 @@ def train_dcrnn(args, dataloaders, adj_mx):
 
 
 def run_dcrnn(args, dataloaders, adj_mx, node_ids):
+    # logger = utils.get_logger(args.paths['model_dir'], __name__, level=args.get('log_level', 'INFO'))
     args = get_model_filename(args)
     model_filename = args.paths['model_filename']
     pred_df = None
