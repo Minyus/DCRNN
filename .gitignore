@@ -109,4 +109,6 @@ ENV/
 scratch.py
 events.out*
 checkpoint
-
+data/
+metr-la_data/
+grab_data/
