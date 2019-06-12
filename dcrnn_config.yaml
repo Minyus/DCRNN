@@ -7,7 +7,7 @@ latest_timepoint:
   timestamp_option:
     set_timestamp: false
     timestamp:
-test_only: false
+test_only: true
 paths:
   source_table_dir: grab_data/input/
   geohash6_filename: grab_data/intermediate/geohash6.csv
@@ -68,7 +68,7 @@ train:
   - 30
   - 40
   - 50
-  test_every_n_epochs: 10
+  test_every_n_epochs: 1
   loss_func: rmse
 use_cpu_only: false
 log_level: DEBUG
