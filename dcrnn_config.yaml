@@ -7,7 +7,7 @@ latest_timepoint:
   timestamp_option:
     set_timestamp: false
     timestamp:
-test_only: true
+test_only: false
 paths:
   source_table_dir: grab_data/input/
   geohash6_filename: grab_data/intermediate/geohash6.csv
@@ -33,7 +33,7 @@ data:
   scale: false
 model:
   activation: tanh
-  output_activation: tanh
+  output_activation: sigmoid
   cl_decay_steps: 2000
   exclude_zeros_in_metric: true
   filter_type: dual_random_walk

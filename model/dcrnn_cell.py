@@ -21,7 +21,8 @@ class DCGRUCell(RNNCell):
         pass
 
     def __init__(self, num_units, adj_mx, max_diffusion_step, num_nodes, num_proj=None,
-                 activation=tf.nn.tanh, reuse=None, filter_type="laplacian", use_gc_for_ru=True):
+                 activation=tf.nn.tanh, reuse=None, filter_type="laplacian", use_gc_for_ru=True,
+                 output_activation=None):
         """
 
         :param num_units:
@@ -37,6 +38,7 @@ class DCGRUCell(RNNCell):
         """
         super(DCGRUCell, self).__init__(_reuse=reuse)
         self._activation = activation
+        self._output_activation = output_activation
         self._num_nodes = num_nodes
         self._num_proj = num_proj
         self._num_units = num_units
@@ -107,6 +109,8 @@ class DCGRUCell(RNNCell):
                     batch_size = inputs.get_shape()[0].value
                     output = tf.reshape(new_state, shape=(-1, self._num_units))
                     output = tf.reshape(tf.matmul(output, w), shape=(batch_size, self.output_size))
+                    if self._output_activation is not None:
+                        output = self._output_activation(output)
         return output, new_state
 
     @staticmethod
