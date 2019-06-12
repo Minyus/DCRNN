@@ -29,7 +29,7 @@ data:
   train_batch_size: 12
   target_train_samples: 1200
   add_time_in_day: true
-  add_day_of_week: false
+  add_day_of_week: true
   scale: false
 model:
   activation: tanh

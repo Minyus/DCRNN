@@ -193,7 +193,8 @@ def setup_dataloader(arr3d,
                      val_batch_size,
                      test_batch_size,
                      scale,
-                     time_dim_index=None
+                     add_time_in_day,
+                     add_day_of_week,
                      ):
 
     assert test_samples >= 1
@@ -241,14 +242,14 @@ def setup_dataloader(arr3d,
     dataloaders = {}
     dataloaders['test_loader'] = \
         SpatioTemporalDataLoader(test_z_arr3d, test_batch_size, seq_len, horizon, shuffle=False,
-                                 time_dim_index=time_dim_index)
+                                 add_time_in_day=add_time_in_day, add_day_of_week=add_day_of_week)
     assert dataloaders['test_loader'].num_batch > 0, 'num_batch for test dataset should be > 0'
     dataloaders['val_loader'] = \
         SpatioTemporalDataLoader(val_z_arr3d, val_batch_size, seq_len, horizon, shuffle=False,
-                                 time_dim_index=time_dim_index)
+                                 add_time_in_day=add_time_in_day, add_day_of_week=add_day_of_week)
     dataloaders['train_loader'] = \
         SpatioTemporalDataLoader(train_z_arr3d, train_batch_size, seq_len, horizon, shuffle=True,
-                                 time_dim_index=time_dim_index)
+                                 add_time_in_day=add_time_in_day, add_day_of_week=add_day_of_week)
 
     dataloaders['scaler'] = scaler
     print('[train]      | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
@@ -267,12 +268,13 @@ class SpatioTemporalDataLoader(object):
                  horizon,
                  shuffle=False,
                  pad_with_last_sample=False,
-                 time_dim_index=None):
+                 add_time_in_day=False, add_day_of_week=False):
 
         self.seq_len = seq_len
         self.horizon = horizon
         self.batch_size = batch_size
-        self.time_dim_index = time_dim_index
+        self.add_time_in_day = add_time_in_day
+        self.add_day_of_week = add_day_of_week
         self.current_ind = 0
         self.size = max((arr3d.shape[0] - \
                          ((sum(seq_len) if isinstance(seq_len, list) else seq_len) + horizon) + 1), 0)
@@ -317,12 +319,16 @@ class SpatioTemporalDataLoader(object):
                     i = sample_index_list.pop()
 
                     hist_i = i + seq_len
-                    x_arr3d = ex_partitioned_reduce_mean(self.arr3d, i, part_size_list=self.seq_len) \
+                    x_arr3d = ex_partitioned_reduce_mean(self.arr3d, i,
+                                                         part_size_list=self.seq_len) \
                         if enable_seq_reducing \
                         else self.arr3d[i:hist_i]
-                    if self.time_dim_index is not None:
+                    if self.add_time_in_day:
                         # extract the fractional part (time) to remove the integer part (day)
-                        x_arr3d[..., self.time_dim_index] = x_arr3d[..., self.time_dim_index] % 1
+                        x_arr3d[..., 1] = x_arr3d[..., 1] % 1
+                    if self.add_day_of_week:
+                        x_arr3d[..., -1] = np.floor(x_arr3d[..., -1]) % 7
+
                     x_arr3d_list.append(x_arr3d)
 
                     future_i = hist_i + self.horizon
@@ -401,21 +407,21 @@ def generate_train_val_test(args, df=None):
     d_df = d_df.set_index('timestamp')
     df = pd.merge(d_df, df, how='left', left_index=True, right_index=True)
 
-    arr2d = df.values
+    arr2d = df.values.astype(np.float32)
     arr2d_list = [arr2d]
 
     # _day_arr1d = df.index.values.astype("datetime64[D]")
     # time_in_day_arr1d = (df.index.values - _day_arr1d) / np.timedelta64(1, "D")
 
     # Note: extract the fractional part (time) after reduce_mean
-    time_in_day_arr1d = (df.index - datetime(1970, 1, 1)).total_seconds() / \
+    days_arr1d = (df.index - datetime(1970, 1, 1)).total_seconds() / \
                         timedelta(days=1).total_seconds()
     day_of_week_arr1d = df.index.dayofweek
 
     if args.data['add_time_in_day']:
-        arr2d_list.append(broadcast_last_dim(time_in_day_arr1d, arr2d.shape[-1]))
+        arr2d_list.append(broadcast_last_dim(days_arr1d, arr2d.shape[-1]))
     if args.data['add_day_of_week']:
-        arr2d_list.append(broadcast_last_dim(day_of_week_arr1d, arr2d.shape[-1]))
+        arr2d_list.append(broadcast_last_dim(days_arr1d, arr2d.shape[-1]))
 
     arr3d = np.stack(arr2d_list, axis=-1)
     num_samples, num_nodes, input_dim = arr3d.shape
@@ -446,7 +452,8 @@ def generate_train_val_test(args, df=None):
             val_batch_size=args.data['val_batch_size'],
             test_batch_size=args.data['test_batch_size'],
             scale=args.data['scale'],
-            time_dim_index=1 if args.data['add_time_in_day'] else None,
+            add_time_in_day=args.data['add_time_in_day'],
+            add_day_of_week=args.data['add_day_of_week'],
             )
         return args, dataloaders
 
@@ -456,7 +463,7 @@ def generate_train_val_test(args, df=None):
                 arr2d,
                 seq_len=args.model['seq_len'],
                 horizon=args.model['horizon'],
-                time_in_day_arr1d=time_in_day_arr1d,
+                time_in_day_arr1d=days_arr1d,
                 day_of_week_arr1d=day_of_week_arr1d,
                 add_time_in_day=args.data['add_time_in_day'],
                 add_day_in_week=args.add_day_in_week,
