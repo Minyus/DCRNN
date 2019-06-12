@@ -196,16 +196,17 @@ class DCRNNSupervisor(object):
                 outputs.append(vals['outputs'])
             if return_ground_truth:
                 ground_truths.append(y)
-            self._logger.debug('Completed {} step #: {:06d} | global step: {:06d}'.\
-                               format('training' if training else 'evaluation', step_i + 1,
-                                      vals['global_step']))
+
+            train_steps_per_epoch = self._train_kwargs.get('train_steps_per_epoch', 1000000)
+            target_train_steps = self._train_kwargs.get('target_train_steps', 1000000)
+            self._logger.debug('Completed {} step #: {:06d} / {:06d} | global step: {:06d} / {:06d}'.\
+                               format('training' if training else 'evaluation',
+                                      step_i + 1, train_steps_per_epoch,
+                                      vals['global_step'], target_train_steps))
 
             if training:
-                if (step_i + 1) >= self._train_kwargs.get('train_steps_per_epoch', 1000000):
+                if ((step_i + 1) >= train_steps_per_epoch) or (vals['global_step'] >= target_train_steps):
                     break
-                if vals['global_step'] >= self._train_kwargs.get('target_train_steps', 1000000):
-                    break
-
 
         results = {
             'loss': np.mean(losses),

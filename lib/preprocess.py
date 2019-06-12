@@ -7,29 +7,16 @@ import os
 import random
 from datetime import datetime, timedelta
 from pathlib import Path
+from pprint import pprint
 
 import pandas as pd
 import numpy as np
-import yaml
 import geohash
 from geopy.distance import great_circle
 
 from lib import utils
 from lib.utils import load_graph_data
 from lib.array_utils import get_seq_len, ex_partitioned_reduce_mean, broadcast_last_dim
-
-class DotDict(dict):
-    __getattr__ = dict.get
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
-
-
-def read_yaml(config_file):
-    with open(config_file) as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
-    args = DotDict({})
-    args.update(config)
-    return args
 
 
 def get_geo_df(s_df):
@@ -490,7 +477,7 @@ def generate_train_val_test(args, df=None):
         return args, None
 
 
-def preprocess(args):
+def preprocess(args, show=True):
     logger = utils.get_logger(args.paths['model_dir'], __name__, level=args.get('log_level', 'INFO'))
     logger.info('Started preprocessing...')
 
@@ -552,6 +539,9 @@ def preprocess(args):
     args, dataloaders = generate_train_val_test(args, st_df)
 
     logger.info('Completed preprocessing.')
+
+    if show:
+        pprint(args)
 
     return args, dataloaders, adj_mx, node_ids
 

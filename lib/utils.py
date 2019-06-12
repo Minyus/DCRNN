@@ -1,15 +1,14 @@
-import logging
-import numpy as np
 import os
-import pickle
-import scipy.sparse as sp
 import sys
-import tensorflow as tf
-
-from scipy.sparse import linalg
-
-import yaml
+import logging
 from pprint import pprint
+import pickle
+
+import scipy.sparse as sp
+from scipy.sparse import linalg
+import numpy as np
+import tensorflow as tf
+import yaml
 
 
 class DataLoader(object):
@@ -221,7 +220,7 @@ class DotDict(dict):
     __delattr__ = dict.__delitem__
 
 
-def read_yaml(config_file, show=True):
+def read_yaml(config_file, show=False):
     with open(config_file) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     args = DotDict({})

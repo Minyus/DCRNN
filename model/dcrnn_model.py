@@ -3,10 +3,8 @@ from __future__ import division
 from __future__ import print_function
 
 import tensorflow as tf
-
 from tensorflow.contrib import legacy_seq2seq
 
-from lib.metrics import masked_mae_loss
 from model.dcrnn_cell import DCGRUCell
 
 
