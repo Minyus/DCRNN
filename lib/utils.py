@@ -162,7 +162,7 @@ def get_logger(log_dir, name, log_filename='info.log', level=logging.INFO):
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
 
-    logger.info('Log directory: %s', log_dir)
+    # logger.info('Log directory: %s', log_dir)
     return logger
 
 

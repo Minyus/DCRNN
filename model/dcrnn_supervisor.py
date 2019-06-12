@@ -199,10 +199,13 @@ class DCRNNSupervisor(object):
             self._logger.debug('Completed {} step #: {:06d} | global step: {:06d}'.\
                                format('training' if training else 'evaluation', step_i + 1,
                                       vals['global_step']))
-            if step_i + 1 >= self._train_kwargs.get('steps_per_epoch', 1000000):
-                break
-            if vals['global_step'] >= self._train_kwargs.get('target_steps', 1000000):
-                break
+
+            if training:
+                if (step_i + 1) >= self._train_kwargs.get('train_steps_per_epoch', 1000000):
+                    break
+                if vals['global_step'] >= self._train_kwargs.get('target_train_steps', 1000000):
+                    break
+
 
         results = {
             'loss': np.mean(losses),
@@ -300,7 +303,7 @@ class DCRNNSupervisor(object):
             self._epoch += 1
 
             sys.stdout.flush()
-            if global_step >= self._train_kwargs.get('target_steps', 1000000):
+            if global_step >= self._train_kwargs.get('target_train_steps', 1000000):
                 self._logger.info('Finish training since the global step reached: {}'.\
                                   format(global_step))
                 break

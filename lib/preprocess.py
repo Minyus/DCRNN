@@ -431,8 +431,13 @@ def generate_train_val_test(args, df=None):
 
     STDATALOADER = True
     if STDATALOADER:
+        args.model['train_steps_per_epoch'] = \
+            args.data['train_samples_per_epoch'] // args.data['train_batch_size']
+        args.model['target_train_steps'] = \
+            args.data['target_train_samples'] // args.data['train_batch_size']
+
         if args.model.get('seq_reducing') and \
-                args.model.get('seq_reducing').get('enable_seq_reducing', False):
+                args.model.get('seq_reducing').get('enable_seq_reducing'):
             seq_len = args.model.get('seq_reducing').get('seq_len_list')
             args.model['seq_len'] = get_seq_len(seq_len)
         else:
@@ -441,8 +446,8 @@ def generate_train_val_test(args, df=None):
             arr3d,
             seq_len=seq_len,
             horizon=args.model['horizon'],
-            test_samples=args.data['test_samples'],
-            val_samples=args.data['val_samples'],
+            test_samples=args.data['test_samples_per_epoch'],
+            val_samples=args.data['val_samples_per_epoch'],
             train_batch_size=args.data['train_batch_size'],
             val_batch_size=args.data['val_batch_size'],
             test_batch_size=args.data['test_batch_size'],
@@ -539,12 +544,13 @@ def preprocess(args):
     args, dataloaders = generate_train_val_test(args, st_df)
 
     logger.info('Completed preprocessing.')
+
     return args, dataloaders, adj_mx, node_ids
 
 
 def transform_to_long(pred_df=None):
-    if pred_df is None:
-        pred_df = pd.read_csv(args.paths['pred_df_filename'], parse_dates=[0], index_col=0)
+    # if pred_df is None:
+    #     pred_df = pd.read_csv(args.paths['pred_df_filename'], parse_dates=[0], index_col=0)
     long_df = pd.DataFrame(pred_df.stack(), columns=['demand'])
     long_df.reset_index(inplace=True)
     long_df.loc[:, 'day'] = long_df['timestamp'].apply(lambda x: int((x - datetime(1970, 1, 1)).days) + 1)
@@ -552,3 +558,10 @@ def transform_to_long(pred_df=None):
     long_df.rename(columns={'level_1': 'geohash6'}, inplace=True)
     long_df = long_df[['geohash6', 'day', 'timestamp', 'demand']]
     return long_df
+
+
+def save_pred_long_df(args, long_df):
+    logger = utils.get_logger(args.paths['model_dir'], __name__, level=args.get('log_level', 'INFO'))
+    long_df.to_csv(args.paths['pred_long_filename'], index=False)
+    logger.info('The final prediction output file was saved at: {}'.\
+          format(args.paths['pred_long_filename']))

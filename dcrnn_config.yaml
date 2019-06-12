@@ -21,11 +21,13 @@ paths:
   pred_long_filename: grab_data/output/dcrnn_pred_output.csv
 timestep_size_in_min: 15
 data:
-  test_samples: 1
-  val_samples: 12
+  test_samples_per_epoch: 1
+  val_samples_per_epoch: 24
+  train_samples_per_epoch: 60
   test_batch_size: 1
   val_batch_size: 1
-  train_batch_size: 12
+  train_batch_size: 24
+  target_train_samples: 1200
   add_time_in_day: false
   add_day_of_week: false
   scale: false
@@ -66,8 +68,6 @@ train:
   - 30
   - 40
   - 50
-  steps_per_epoch: 5
-  target_steps: 1000
   test_every_n_epochs: 10
 use_cpu_only: false
 log_level: DEBUG
