@@ -48,6 +48,12 @@ def get_seq_len(part_size_list):
     return seq_len
 
 
+def broadcast_last_dim(arr1d, num_broadcast):
+    arr2d = np.expand_dims(arr1d, -1)
+    arr2d = np.tile(arr2d, (1, num_broadcast))
+    return arr2d
+
+
 #%%
 if __name__ == '__main__':
     arr = np.arange(40)
