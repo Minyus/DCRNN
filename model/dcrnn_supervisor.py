@@ -197,8 +197,8 @@ class DCRNNSupervisor(object):
             if return_ground_truth:
                 ground_truths.append(y)
 
-            train_steps_per_epoch = self._train_kwargs.get('train_steps_per_epoch', 1000000)
-            target_train_steps = self._train_kwargs.get('target_train_steps', 1000000)
+            train_steps_per_epoch = self._data_kwargs.get('train_steps_per_epoch', 1000000)
+            target_train_steps = self._data_kwargs.get('target_train_steps', 1000000)
             self._logger.debug('Completed {} step #: {:06d} / {:06d} | global step: {:06d} / {:06d}'.\
                                format('training' if training else 'evaluation',
                                       step_i + 1, train_steps_per_epoch,
