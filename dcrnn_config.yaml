@@ -23,7 +23,7 @@ timestep_size_in_min: 15
 data:
   test_samples_per_epoch: 1
   val_samples_per_epoch: 12
-  train_samples_per_epoch: 60
+  train_samples_per_epoch: 12
   test_batch_size: 1
   val_batch_size: 1
   train_batch_size: 12
@@ -69,5 +69,6 @@ train:
   - 40
   - 50
   test_every_n_epochs: 10
+  loss_func: rmse
 use_cpu_only: false
 log_level: DEBUG
