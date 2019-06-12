@@ -194,7 +194,7 @@ class DCRNNSupervisor(object):
             vals = sess.run(fetches, feed_dict=feed_dict)
 
             losses.append(vals['loss'])
-            maes.append(vals['mae'])
+            # maes.append(vals['mae'])
             if writer is not None and 'merged' in vals:
                 writer.add_summary(vals['merged'], global_step=vals['global_step'])
             if return_output:
