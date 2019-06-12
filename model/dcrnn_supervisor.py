@@ -314,7 +314,7 @@ class DCRNNSupervisor(object):
                     self._logger.warning('Early stopping at epoch: {}'.format(self._epoch))
                     break
 
-            history.append(val_mae)
+            history.append(val_loss)
             # Increases epoch.
             self._epoch += 1
 
