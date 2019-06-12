@@ -120,70 +120,6 @@ def get_adj_mat(args, adj_mx=None):
     return adj_mx
 
 
-def generate_graph_seq2seq_io_data(arr2d,
-                                   seq_len,
-                                   horizon,
-                                   time_in_day_arr1d,
-                                   day_of_week_arr1d,
-                                   add_time_in_day,
-                                   add_day_in_week,
-                                   test_timesteps,
-                                   val_timesteps
-                                   ):
-
-    x_offsets = np.arange(-seq_len + 1, 1, 1)
-    y_offsets = np.arange(1, horizon + 1, 1)
-
-    num_samples, num_nodes = arr2d.shape
-    data = np.expand_dims(arr2d, axis=-1)
-    data_list = [data]
-    if add_time_in_day:
-        time_in_day = np.tile(time_in_day_arr1d, [1, num_nodes, 1]).transpose((2, 1, 0))
-        data_list.append(time_in_day)
-    if add_day_in_week:
-        day_in_week = np.zeros(shape=(num_samples, num_nodes, 7))
-        day_in_week[np.arange(num_samples), :, day_of_week_arr1d] = 1
-        data_list.append(day_in_week)
-
-    data = np.concatenate(data_list, axis=-1)
-
-    # t is the index of the last observation.
-    min_t = abs(min(x_offsets))
-    max_t = abs(num_samples - abs(max(y_offsets)))  # Exclusive
-
-    x = [data[t + x_offsets, ...] for t in range(min_t, max_t)]
-    y = [data[t + y_offsets, ...] for t in range(min_t, max_t)]
-
-    x = np.stack(x, axis=0)
-    y = np.stack(y, axis=0)
-
-    # x: (epoch_size, input_length, num_nodes, input_dim)
-    # y: (epoch_size, output_length, num_nodes, output_dim)
-
-    print("history (model_input): ", x.shape, " | future (model_output): ", y.shape)
-    # Write the data into npz file.
-    num_samples = x.shape[0]
-
-    num_test = test_timesteps if test_timesteps <= num_samples else num_samples
-    num_val = val_timesteps if \
-        (test_timesteps + val_timesteps) <= num_samples else 0
-    num_train = num_samples - num_test - num_val
-
-    # test
-    x_test, y_test = x[-num_test:], y[-num_test:]
-
-    # val
-    x_val, y_val = (
-        x[num_train: num_train + num_val],
-        y[num_train: num_train + num_val],
-        ) if num_val > 0 else (x_test, y_test)
-
-    # train
-    x_train, y_train = x[:num_train], y[:num_train]
-
-    return x_train, y_train, x_val, y_val, x_test, y_test, x_offsets, y_offsets
-
-
 def setup_dataloader(arr3d,
                      seq_len,
                      horizon,
@@ -414,9 +350,9 @@ def generate_train_val_test(args, df=None):
     # time_in_day_arr1d = (df.index.values - _day_arr1d) / np.timedelta64(1, "D")
 
     # Note: extract the fractional part (time) after reduce_mean
-    days_arr1d = (df.index - datetime(1970, 1, 1)).total_seconds() / \
-                        timedelta(days=1).total_seconds()
-    day_of_week_arr1d = df.index.dayofweek
+    days_arr1d = ((df.index - datetime(1970, 1, 1)).total_seconds() / \
+                        timedelta(days=1).total_seconds()).astype(np.float32)
+    day_of_week_arr1d = df.index.dayofweek.astype(np.float32)
 
     if args.data['add_time_in_day']:
         arr2d_list.append(broadcast_last_dim(days_arr1d, arr2d.shape[-1]))
@@ -429,59 +365,31 @@ def generate_train_val_test(args, df=None):
     args.model['input_dim'] = input_dim
     args.model['output_dim'] = 1
 
-    STDATALOADER = True
-    if STDATALOADER:
-        args.model['train_steps_per_epoch'] = \
-            args.data['train_samples_per_epoch'] // args.data['train_batch_size']
-        args.model['target_train_steps'] = \
-            args.data['target_train_samples'] // args.data['train_batch_size']
+    args.model['train_steps_per_epoch'] = \
+        args.data['train_samples_per_epoch'] // args.data['train_batch_size']
+    args.model['target_train_steps'] = \
+        args.data['target_train_samples'] // args.data['train_batch_size']
 
-        if args.model.get('seq_reducing') and \
-                args.model.get('seq_reducing').get('enable_seq_reducing'):
-            seq_len = args.model.get('seq_reducing').get('seq_len_list')
-            args.model['seq_len'] = get_seq_len(seq_len)
-        else:
-            seq_len = args.model['seq_len']
-        dataloaders = setup_dataloader(
-            arr3d,
-            seq_len=seq_len,
-            horizon=args.model['horizon'],
-            test_samples=args.data['test_samples_per_epoch'],
-            val_samples=args.data['val_samples_per_epoch'],
-            train_batch_size=args.data['train_batch_size'],
-            val_batch_size=args.data['val_batch_size'],
-            test_batch_size=args.data['test_batch_size'],
-            scale=args.data['scale'],
-            add_time_in_day=args.data['add_time_in_day'],
-            add_day_of_week=args.data['add_day_of_week'],
-            )
-        return args, dataloaders
-
-    if not STDATALOADER:
-        x_train, y_train, x_val, y_val, x_test, y_test, x_offsets, y_offsets = \
-            generate_graph_seq2seq_io_data(
-                arr2d,
-                seq_len=args.model['seq_len'],
-                horizon=args.model['horizon'],
-                time_in_day_arr1d=days_arr1d,
-                day_of_week_arr1d=day_of_week_arr1d,
-                add_time_in_day=args.data['add_time_in_day'],
-                add_day_in_week=args.add_day_in_week,
-                test_timesteps=args.test_timesteps,
-                val_timesteps=args.val_timesteps,
-                )
-
-        for cat in ["train", "val", "test"]:
-            _x, _y = locals()["x_" + cat], locals()["y_" + cat]
-            print(cat, " >> history (model_input):", _x.shape, " | future (model_output): ", _y.shape)
-            np.savez_compressed(
-                os.path.join(args.output_dir, "%s.npz" % cat),
-                x=_x,
-                y=_y,
-                x_offsets=x_offsets.reshape(list(x_offsets.shape) + [1]),
-                y_offsets=y_offsets.reshape(list(y_offsets.shape) + [1]),
-            )
-        return args, None
+    if args.model.get('seq_reducing') and \
+            args.model.get('seq_reducing').get('enable_seq_reducing'):
+        seq_len = args.model.get('seq_reducing').get('seq_len_list')
+        args.model['seq_len'] = get_seq_len(seq_len)
+    else:
+        seq_len = args.model['seq_len']
+    dataloaders = setup_dataloader(
+        arr3d,
+        seq_len=seq_len,
+        horizon=args.model['horizon'],
+        test_samples=args.data['test_samples_per_epoch'],
+        val_samples=args.data['val_samples_per_epoch'],
+        train_batch_size=args.data['train_batch_size'],
+        val_batch_size=args.data['val_batch_size'],
+        test_batch_size=args.data['test_batch_size'],
+        scale=args.data['scale'],
+        add_time_in_day=args.data['add_time_in_day'],
+        add_day_of_week=args.data['add_day_of_week'],
+        )
+    return args, dataloaders
 
 
 def preprocess(args, show=True):
