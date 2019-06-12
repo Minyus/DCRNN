@@ -393,6 +393,10 @@ def generate_train_val_test(args, df=None):
 
 
 def preprocess(args, show=True):
+    for path_str in args.paths.values():
+        parent_str = Path(path_str).parent.__str__()
+        os.makedirs(parent_str, exist_ok=True)
+
     logger = utils.get_logger(args.paths['model_dir'], __name__, level=args.get('log_level', 'INFO'))
     logger.info('Started preprocessing...')
 
@@ -403,11 +407,15 @@ def preprocess(args, show=True):
                     (not Path(args.paths['geohash6_filename']).exists())
 
     if need_st_flag or need_adj_flag:
-
         source_table_dir = Path(args.paths.get('source_table_dir'))
-        source_table_filename = source_table_dir.glob('*.csv').__next__()
-        if not source_table_filename:
-            raise FileNotFoundError('directory: ' + args.paths.get('source_table_dir'))
+        if not source_table_dir.exists():
+            raise FileNotFoundError('Directory not found: ' + args.paths.get('source_table_dir'))
+        source_candidates = list(source_table_dir.glob('*.csv'))
+        if not source_candidates:
+            raise FileNotFoundError('No CSV file found at : ' + args.paths.get('source_table_dir'))
+        if source_candidates.__len__() >= 2:
+            logger.warning('Multiple CSV files found: {}'.format(source_candidates))
+        source_table_filename = source_candidates[0].__str__()
         logger.info('Reading: {}'.format(source_table_filename))
         s_df = pd.read_csv(source_table_filename)
 
