@@ -148,6 +148,7 @@ def config_logging(log_dir, log_filename='info.log', level=logging.INFO):
 
 
 def get_logger(log_dir, name, log_filename='info.log', level=logging.INFO):
+    os.makedirs(log_dir, exist_ok=True)
     logger = logging.getLogger(name)
     logger.setLevel(level)
     # Add file handler and stdout handler

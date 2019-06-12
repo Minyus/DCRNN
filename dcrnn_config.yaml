@@ -29,11 +29,11 @@ data:
   train_batch_size: 12
   target_train_samples: 1200
   add_time_in_day: true
-  add_day_of_week: true
+  add_day_of_week: false
   scale: false
 model:
   activation: tanh
-  output_activation: sigmoid
+  output_activation: 
   cl_decay_steps: 2000
   exclude_zeros_in_metric: true
   filter_type: dual_random_walk
