@@ -1,7 +1,6 @@
 import os
 import sys
 import logging
-from pprint import pprint
 import pickle
 
 import scipy.sparse as sp
@@ -221,12 +220,10 @@ class DotDict(dict):
     __delattr__ = dict.__delitem__
 
 
-def read_yaml(config_file, show=False):
+def read_yaml(config_file):
     with open(config_file) as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     args = DotDict({})
     args.update(config)
-    if show:
-        pprint(args)
     args.paths['config_filepath'] = config_file
     return args

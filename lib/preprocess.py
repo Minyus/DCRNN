@@ -8,7 +8,7 @@ import random
 import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
-from pprint import pprint
+from pprint import pformat
 
 import pandas as pd
 import numpy as np
@@ -18,6 +18,11 @@ from geopy.distance import great_circle
 from lib import utils
 from lib.utils import load_graph_data
 from lib.array_utils import get_seq_len, ex_partitioned_reduce_mean, broadcast_last_dim
+
+from logging import getLogger
+
+logger = getLogger('dcrnn')
+logger.propagate = False
 
 
 def get_geo_df(s_df):
@@ -148,7 +153,7 @@ def setup_dataloader(arr3d,
         'val_samples: {} | val_batch_size:{}'.format(val_samples, val_batch_size)
 
     if val_timesteps == 0:
-        print('Test dataset will be used as validation dataset as well. '
+        logger.warning('Test dataset will be used as validation dataset as well. '
               'To use separate validation dataset, increase val_timesteps. ')
 
     num_samples, num_nodes, _ = arr3d.shape
@@ -190,11 +195,11 @@ def setup_dataloader(arr3d,
                                  add_time_in_day=add_time_in_day, add_day_of_week=add_day_of_week)
 
     dataloaders['scaler'] = scaler
-    print('[train]      | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
+    logger.info('[train]      | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
           format(num_train, dataloaders['train_loader'].size, dataloaders['train_loader'].num_batch))
-    print('[validation] | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
+    logger.info('[validation] | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
           format(num_val, dataloaders['val_loader'].size, dataloaders['val_loader'].num_batch))
-    print('[test]       | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
+    logger.info('[test]       | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
           format(num_test, dataloaders['test_loader'].size, dataloaders['test_loader'].num_batch))
 
     return dataloaders
@@ -303,14 +308,14 @@ def get_datetime_latest(args, df):
         m = args.latest_timepoint['day_hour_min_option']['min']
         datetime_latest = args.datetime_start + \
                           pd.Timedelta(d - 1, unit='d') + pd.Timedelta(h, unit='h') + pd.Timedelta(m, unit='m')
-        print('The latest timepoint ("T") was set to day {:02d} {:02d}:{:02d}'.format(d, h, m))
+        logger.info('The latest timepoint ("T") is set to day {:02d} {:02d}:{:02d}'.format(d, h, m))
     elif args.latest_timepoint['timestamp_option']['set_timestamp']:
         ts = args.latest_timepoint['timestamp_option']['timestamp']
         datetime_latest = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S")
-        print('The latest timepoint ("T") was set to {}'.format(ts))
+        logger.info('The latest timepoint ("T") is set to {}'.format(ts))
     else:
         datetime_latest = df.index.values[-1]
-        print('The latest datetime (timestamp "T"): ', datetime_latest)
+        logger.info('The latest timepoint ("T") is: ', datetime_latest)
     return datetime_latest
 
 
@@ -407,8 +412,10 @@ def preprocess(args, show=True):
         parent_str = Path(path_str).parent.__str__()
         os.makedirs(parent_str, exist_ok=True)
 
-    logger = utils.get_logger(args.paths['model_dir'], __name__, level=args.get('log_level', 'INFO'))
-    logger.info('Started preprocessing...')
+    # logger = utils.get_logger(args.paths['model_dir'], __name__, level=args.get('log_level', 'INFO'))
+
+    logger.info('Started preprocessing.')
+    logger.info('Arguments read from the yaml file: \n' + pformat(args))
 
     config_filepath = args.paths.get('config_filepath')
     if config_filepath:
@@ -434,7 +441,6 @@ def preprocess(args, show=True):
         s_df = pd.read_csv(source_table_filename)
 
     adj_mx = None
-    node_ids = None
     if need_adj_flag:
         logger.info('Preparing adjacency matrix...')
         ##%% Prepare for adjacency matrix
@@ -476,9 +482,7 @@ def preprocess(args, show=True):
     args, dataloaders = generate_train_val_test(args, st_df)
 
     logger.info('Completed preprocessing.')
-
-    if show:
-        pprint(args)
+    logger.info('Arguments after preprocessing: \n' + pformat(args))
 
     return args, dataloaders, adj_mx, node_ids
 
@@ -497,7 +501,8 @@ def transform_to_long(pred_df=None):
 
 
 def save_pred_long_df(args, long_df):
-    logger = utils.get_logger(args.paths['model_dir'], __name__, level=args.get('log_level', 'INFO'))
+    # logger = utils.get_logger(args.paths['model_dir'], __name__, level=args.get('log_level', 'INFO'))
+
     long_filename = args.paths['pred_long_filename']
     model_filename = args.paths['model_filename']
     long_filename = \
