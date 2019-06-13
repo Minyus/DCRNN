@@ -42,11 +42,12 @@ def train_dcrnn(args, dataloaders, adj_mx):
         tf_config = setup_tf(args)
         with tf.Session(config=tf_config) as sess:
             supervisor = \
-                DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **args)
+                DCRNNSupervisor(sess, adj_mx=adj_mx, dataloaders=dataloaders, **args)
             # model_filename = args.paths['model_filename']
             # if model_filename:
             #     supervisor.load(sess, model_filename)
             supervisor.train(sess=sess)
+    return args
 
 
 def run_dcrnn(args, dataloaders, adj_mx, node_ids):
@@ -58,14 +59,14 @@ def run_dcrnn(args, dataloaders, adj_mx, node_ids):
         tf_config = setup_tf(args)
         with tf.Session(config=tf_config) as sess:
             supervisor = \
-                DCRNNSupervisor(adj_mx=adj_mx, dataloaders=dataloaders, **args)
-            supervisor.load(sess, model_filename)
+                DCRNNSupervisor(sess, adj_mx=adj_mx, dataloaders=dataloaders, **args)
+            # supervisor.load(sess, model_filename)
             outputs = supervisor.evaluate(sess)
         np.savez_compressed(args.paths['output_filename'], **outputs)
 
         pred_tensor = np.stack(outputs['predictions'])
         # pred_arr2d = pred_tensor[:, -1, :]
-        pred_arr2d = pred_tensor[:, 0, :]
+        pred_arr2d = pred_tensor[:, 0, :]  # Note: the indices are reversed
         np.savetxt(args.paths['pred_arr2d_filename'], pred_arr2d, delimiter=',')
         # print('Predictions saved as {}.'.format(args.paths['pred_arr2d_filename']))
 
@@ -80,7 +81,7 @@ def run_dcrnn(args, dataloaders, adj_mx, node_ids):
     else:
         print('Pretrained model was not found in the directory: {}'.\
               format(args.paths['model_dir']))
-    return pred_df
+    return args, pred_df
 
 
 

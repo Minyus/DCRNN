@@ -181,6 +181,7 @@ def setup_dataloader(arr3d,
         SpatioTemporalDataLoader(test_z_arr3d, test_batch_size, seq_len, horizon, shuffle=False,
                                  add_time_in_day=add_time_in_day, add_day_of_week=add_day_of_week)
     assert dataloaders['test_loader'].num_batch > 0, 'num_batch for test dataset should be > 0'
+
     dataloaders['val_loader'] = \
         SpatioTemporalDataLoader(val_z_arr3d, val_batch_size, seq_len, horizon, shuffle=False,
                                  add_time_in_day=add_time_in_day, add_day_of_week=add_day_of_week)
@@ -366,9 +367,12 @@ def generate_train_val_test(args, df=None):
     args.model['input_dim'] = input_dim
     args.model['output_dim'] = 1
 
-    args.model['train_steps_per_epoch'] = \
+    assert args.data['train_samples_per_epoch'] >= args.data['train_batch_size']
+    assert args.data['target_train_samples'] >= args.data['train_samples_per_epoch']
+
+    args.data['train_steps_per_epoch'] = \
         args.data['train_samples_per_epoch'] // args.data['train_batch_size']
-    args.model['target_train_steps'] = \
+    args.data['target_train_steps'] = \
         args.data['target_train_samples'] // args.data['train_batch_size']
 
     if args.model.get('seq_reducing') and \
@@ -390,6 +394,11 @@ def generate_train_val_test(args, df=None):
         add_time_in_day=args.data['add_time_in_day'],
         add_day_of_week=args.data['add_day_of_week'],
         )
+
+    args.data['train_steps_per_epoch'] = \
+        min(args.data['train_samples_per_epoch'] // args.data['train_batch_size'],
+            dataloaders['train_loader'].num_batch)
+
     return args, dataloaders
 
 
@@ -479,7 +488,8 @@ def transform_to_long(pred_df=None):
     #     pred_df = pd.read_csv(args.paths['pred_df_filename'], parse_dates=[0], index_col=0)
     long_df = pd.DataFrame(pred_df.stack(), columns=['demand'])
     long_df.reset_index(inplace=True)
-    long_df.loc[:, 'day'] = long_df['timestamp'].apply(lambda x: int((x - datetime(1970, 1, 1)).days) + 1)
+    long_df.loc[:, 'day'] = \
+        long_df['timestamp'].apply(lambda x: int((x - datetime(1970, 1, 1)).days) + 1)
     long_df.loc[:, 'timestamp'] = long_df['timestamp'].apply(lambda x: x.strftime('%H:%M'))
     long_df.rename(columns={'level_1': 'geohash6'}, inplace=True)
     long_df = long_df[['geohash6', 'day', 'timestamp', 'demand']]
@@ -488,6 +498,10 @@ def transform_to_long(pred_df=None):
 
 def save_pred_long_df(args, long_df):
     logger = utils.get_logger(args.paths['model_dir'], __name__, level=args.get('log_level', 'INFO'))
-    long_df.to_csv(args.paths['pred_long_filename'], index=False)
-    logger.info('The final prediction output file was saved at: {}'.\
-          format(args.paths['pred_long_filename']))
+    long_filename = args.paths['pred_long_filename']
+    model_filename = args.paths['model_filename']
+    long_filename = \
+        Path(long_filename).parent / \
+        '{}_{}'.format(Path(model_filename).name, Path(long_filename).name)
+    long_df.to_csv(long_filename, index=False)
+    logger.info('The final prediction output file was saved at: {}'.format(long_filename))

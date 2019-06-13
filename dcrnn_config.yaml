@@ -7,7 +7,7 @@ latest_timepoint:
   timestamp_option:
     set_timestamp: false
     timestamp:
-test_only: false
+test_only: true
 paths:
   source_table_dir: grab_data/input/
   geohash6_filename: grab_data/intermediate/geohash6.csv
@@ -18,16 +18,16 @@ paths:
   output_filename: grab_data/intermediate/dcrnn_predictions.npz
   pred_arr2d_filename: grab_data/intermediate/dcrnn_pred_arr2d.csv
   pred_df_filename: grab_data/intermediate/dcrnn_pred_df.csv
-  pred_long_filename: grab_data/output/dcrnn_pred_output.csv
+  pred_long_filename: grab_data/output/output.csv
 timestep_size_in_min: 15
 data:
-  test_samples_per_epoch: 96
+  test_samples_per_epoch: 1
   val_samples_per_epoch: 0
-  train_samples_per_epoch: 5760
+  train_samples_per_epoch: 24
   test_batch_size: 1
   val_batch_size: 1
-  train_batch_size: 24
-  target_train_samples: 1200
+  train_batch_size: 12
+  target_train_samples: 2400
   add_time_in_day: true
   add_day_of_week: false
   scale: false
@@ -57,8 +57,8 @@ model:
 train:
   base_lr: 0.01
   dropout: 0
-  epoch: 0
-  epochs: 10000
+#  epoch: 0
+#  epochs: 10000
   epsilon: 0.001
   lr_decay_ratio: 0.1
   max_grad_norm: 5
@@ -73,5 +73,6 @@ train:
   - 50
   test_every_n_epochs: 1
   loss_func: mae
+  metric_func: rmse
 use_cpu_only: false
 log_level: INFO

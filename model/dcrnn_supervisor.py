@@ -21,7 +21,7 @@ class DCRNNSupervisor(object):
     Do experiments using Graph Random Walk RNN model.
     """
 
-    def __init__(self, adj_mx, dataloaders, **kwargs):
+    def __init__(self, sess, adj_mx, dataloaders, **kwargs):
 
         self._kwargs = kwargs
         self._data_kwargs = kwargs.get('data')
@@ -99,6 +99,7 @@ class DCRNNSupervisor(object):
                           'rmse': masked_rmse_loss(scaler, null_val),
                           'mse': masked_mse_loss(scaler, null_val)}
         self._loss_fn = loss_func_dict.get(kwargs['train'].get('loss_func', 'mae'))
+        self._metric_fn = loss_func_dict.get(kwargs['train'].get('metric_func', 'mae'))
 
         self._train_loss = self._loss_fn(preds=preds, labels=labels)
 
@@ -106,14 +107,20 @@ class DCRNNSupervisor(object):
         grads = tf.gradients(self._train_loss, tvars)
         max_grad_norm = kwargs['train'].get('max_grad_norm', 1.)
         grads, _ = tf.clip_by_global_norm(grads, max_grad_norm)
-        global_step = tf.train.get_or_create_global_step()
-        self._train_op = optimizer.apply_gradients(zip(grads, tvars), global_step=global_step,
+
+        self._train_op = optimizer.apply_gradients(zip(grads, tvars),
+                                                   global_step=tf.train.get_or_create_global_step(),
                                                    name='train_op')
 
-        self._epoch = 0
-
-        max_to_keep = self._train_kwargs.get('max_to_keep', 100)
-        self._saver = tf.train.Saver(tf.global_variables(), max_to_keep=max_to_keep)
+        # load model
+        model_filename = self._paths_kwargs.get('model_filename')
+        if model_filename is not None:
+            max_to_keep = self._train_kwargs.get('max_to_keep', 100)
+            saver = tf.train.Saver(tf.global_variables(), max_to_keep=max_to_keep)
+            saver.restore(sess, model_filename)
+            self._logger.info('Pretrained model was loaded from : {}'.format(model_filename))
+        else:
+            sess.run(tf.global_variables_initializer())
 
         # Log model statistics.
         total_trainable_parameter = utils.get_total_trainable_parameter_size()
@@ -159,7 +166,7 @@ class DCRNNSupervisor(object):
                             training=False, writer=None,
                             return_ground_truth=False):
         losses = []
-        # maes = []
+        metrics = []
         outputs = []
         ground_truths = []
 
@@ -167,9 +174,10 @@ class DCRNNSupervisor(object):
         preds = model.outputs
         labels = model.labels[..., :output_dim]
         loss = self._loss_fn(preds=preds, labels=labels)
+        metric = self._metric_fn(preds=preds, labels=labels)
         fetches = {
             'loss': loss,
-            # 'mae': loss, # TODO:
+            'metric': metric,
             'global_step': tf.train.get_or_create_global_step()
         }
         if training:
@@ -191,31 +199,31 @@ class DCRNNSupervisor(object):
                 model.labels: y,
             }
 
-            vals = sess.run(fetches, feed_dict=feed_dict)
+            v = sess.run(fetches, feed_dict=feed_dict)
 
-            losses.append(vals['loss'])
-            # maes.append(vals['mae'])
-            if writer is not None and 'merged' in vals:
-                writer.add_summary(vals['merged'], global_step=vals['global_step'])
+            losses.append(v['loss'])
+            metrics.append(v['metric'])
+            if writer is not None and 'merged' in v:
+                writer.add_summary(v['merged'], global_step=v['global_step'])
             if return_output:
-                outputs.append(vals['outputs'])
+                outputs.append(v['outputs'])
             if return_ground_truth:
                 ground_truths.append(y)
 
             train_steps_per_epoch = self._data_kwargs.get('train_steps_per_epoch', 1)
             target_train_steps = self._data_kwargs.get('target_train_steps', 1000000)
-            self._logger.debug('Completed {} step #: {:06d} / {:06d} | global step: {:06d} / {:06d}'.\
-                               format('training' if training else 'evaluation',
+            self._logger.debug('Completed {} step: {:06d}/{:06d}|global step {:06d}/{:06d}|loss:{}|metric:{}'.\
+                               format('training' if training else 'validation',
                                       step_i + 1, train_steps_per_epoch,
-                                      vals['global_step'], target_train_steps))
+                                      v['global_step'], target_train_steps, v['loss'], v['metric']))
 
             if training:
-                if ((step_i + 1) >= train_steps_per_epoch) or (vals['global_step'] >= target_train_steps):
+                if ((step_i + 1) >= train_steps_per_epoch) or (v['global_step'] >= target_train_steps):
                     break
 
         results = {
             'loss': np.mean(losses),
-            # 'mae': np.mean(maes)
+            'metric': np.mean(metrics)
         }
         if return_output:
             results['outputs'] = outputs
@@ -236,25 +244,23 @@ class DCRNNSupervisor(object):
         kwargs.update(self._train_kwargs)
         return self._train(sess, **kwargs)
 
-    def _train(self, sess, base_lr, epoch, steps, patience=50, epochs=100,
+    def _train(self, sess, base_lr, steps, patience=50,
                min_learning_rate=2e-6, lr_decay_ratio=0.1, save_model=1,
                test_every_n_epochs=10, **train_kwargs):
         history = []
-        min_val_loss = float('inf')
+        min_val_metric = float('inf')
         wait = 0
+        target_train_steps = self._data_kwargs.get('target_train_steps', 1000000)
 
-        max_to_keep = train_kwargs.get('max_to_keep', 100)
-        saver = tf.train.Saver(tf.global_variables(), max_to_keep=max_to_keep)
-        model_filename = self._paths_kwargs.get('model_filename')
-        if model_filename is not None:
-            saver.restore(sess, model_filename)
-        else:
-            sess.run(tf.global_variables_initializer())
+        while True: # self._epoch <= epochs:
 
-        self._epoch = epoch + 1
+            self._global_step = sess.run(tf.train.get_or_create_global_step())
+            self._epoch = self._global_step // self._data_kwargs['train_steps_per_epoch']
+            # self._target_train_samples = self._data_kwargs['target_train_samples']
 
-        while self._epoch <= epochs:
-            self._logger.info('Started epoch: {} / {}'.format(self._epoch, epochs))
+            self._logger.info('Global step: {} / {} | epoch: {}'.\
+                              format(self._global_step, target_train_steps, self._epoch))
+
             # Learning rate schedule.
             new_lr = max(min_learning_rate,
                          base_lr * (lr_decay_ratio ** np.sum(self._epoch >= np.array(steps))))
@@ -266,7 +272,7 @@ class DCRNNSupervisor(object):
                                                      training=True,
                                                      writer=self._writer)
             train_loss = train_results['loss']
-            # train_mae = train_results['mae']
+            train_metric = train_results['metric']
             if train_loss > 1e5:
                 self._logger.warning('Gradient explosion detected. Ending...')
                 break
@@ -276,38 +282,43 @@ class DCRNNSupervisor(object):
             val_results = self.run_epoch_generator(sess, self._val_model,
                                                    self._data['val_loader'].get_iterator(),
                                                    training=False)
-            val_loss = np.asscalar(val_results['loss'])
-            # val_mae = np.asscalar(val_results['mae'])
+            # val_loss = np.asscalar(val_results['loss'])
+            # val_metric = np.asscalar(val_results['metric'])
+            val_loss = val_results['loss']
+            val_metric = val_results['metric']
 
             utils.add_simple_summary(self._writer,
                                      ['loss/train_loss',
-                                      # 'metric/train_mae',
+                                      'metric/train_metric',
                                       'loss/val_loss',
-                                      # 'metric/val_mae',
+                                      'metric/val_metric',
                                       ],
                                      [train_loss,
-                                      # train_mae,
+                                      train_metric,
                                       val_loss,
-                                      # val_mae,
+                                      val_metric,
                                       ],
                                      global_step=global_step)
             end_time = time.time()
+
             message = \
-                ('Epoch: {}/{}|Global Step: {}|train_loss: {:8.5f}|val_loss: {:8.5f}|' + \
+                ('Epoch: {:6d}/{:6d}|global step: {:6d}/{:6d}|' + \
+                 'train_loss: {:8.5f}|train_metric: {:8.5f}|val_loss: {:8.5f}|val_metric: {:8.5f}' + \
                 'lr:{:.6f}|{:.0f}s/epoch').\
-                format(self._epoch, epochs, global_step, train_loss, val_loss,
+                format(self._epoch, epochs, global_step, target_train_steps,
+                       train_loss, train_metric, val_loss, val_metric,
                        new_lr, (end_time - start_time))
             self._logger.info(message)
             if self._epoch % test_every_n_epochs == test_every_n_epochs - 1:
                 self.evaluate(sess)
-            if val_loss <= min_val_loss:
+            if val_metric <= min_val_metric:
                 wait = 0
                 if save_model > 0:
-                    model_filename = self.save(sess, val_loss)
+                    model_filename = self.save(sess, val_metric)
                 self._logger.info(
-                    'Val loss decrease from {:8.5f} to {:8.5f}. The model was saved at: {}'.\
-                    format(min_val_loss, val_loss, model_filename))
-                min_val_loss = val_loss
+                    'Val metric decrease from {:8.5f} to {:8.5f}. The model was saved at: {}'.\
+                    format(min_val_metric, val_metric, model_filename))
+                min_val_metric = val_metric
             else:
                 wait += 1
                 if wait > patience:
@@ -399,20 +410,12 @@ class DCRNNSupervisor(object):
         }
         return outputs
 
-    def load(self, sess, model_filename):
-        """
-        Restore from saved model.
-        :param sess:
-        :param model_filename:
-        :return:
-        """
-        self._saver.restore(sess, model_filename)
-
-    def save(self, sess, val_loss):
+    def save(self, sess, metric):
         config = dict(self._kwargs)
         global_step = np.asscalar(sess.run(tf.train.get_or_create_global_step()))
-        loss_func = self._kwargs.get('loss_func', 'mae')
-        prefix = os.path.join(self._log_dir, 'model_{}{:08.6f}'.format(loss_func, val_loss))
+        # loss_func = self._kwargs.get('loss_func', 'mae')
+        metric_func = self._kwargs.get('metric_func', 'mae')
+        prefix = os.path.join(self._log_dir, 'model_{}{:09.7f}'.format(metric_func, metric))
         config['train']['epoch'] = self._epoch
         config['train']['global_step'] = global_step
         config['train']['log_dir'] = self._log_dir
