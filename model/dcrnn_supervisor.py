@@ -354,8 +354,19 @@ class DCRNNSupervisor(object):
         y_preds_original = []
         y_truths_original = []
 
+        min_output_value = self._data_kwargs.get('min_output_value')
+        max_output_value = self._data_kwargs.get('max_output_value')
+        clip = (min_output_value is not None) or (max_output_value is not None)
+        if clip:
+            self._logger.info('The output values are clipped to range: [{}, {}]'.\
+                              format(min_output_value, max_output_value))
+
         for horizon_i in range(y_truths.shape[1]):
             y_pred_original = scaler.inverse_transform(y_preds[:, horizon_i, :, 0])
+            if clip:
+                y_pred_original = \
+                    np.clip(y_pred_original, min_output_value, max_output_value,
+                            out=y_pred_original)
             y_preds_original.append(y_pred_original)
             self._logger.info(stat_str(y_pred_original, horizon_i, 'pred'))
 

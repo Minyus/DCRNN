@@ -228,4 +228,5 @@ def read_yaml(config_file, show=False):
     args.update(config)
     if show:
         pprint(args)
+    args.paths['config_filepath'] = config_file
     return args

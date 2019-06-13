@@ -5,6 +5,7 @@ from __future__ import unicode_literals
 
 import os
 import random
+import shutil
 from datetime import datetime, timedelta
 from pathlib import Path
 from pprint import pprint
@@ -399,6 +400,10 @@ def preprocess(args, show=True):
 
     logger = utils.get_logger(args.paths['model_dir'], __name__, level=args.get('log_level', 'INFO'))
     logger.info('Started preprocessing...')
+
+    config_filepath = args.paths.get('config_filepath')
+    if config_filepath:
+        shutil.copy2(config_filepath, args.paths['model_dir'])
 
     args.timestep_size_freq = '{}min'.format(args.timestep_size_in_min)
 

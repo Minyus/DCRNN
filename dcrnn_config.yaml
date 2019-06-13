@@ -14,23 +14,26 @@ paths:
   distances_filename: grab_data/intermediate/distances.csv
   traffic_df_filename: grab_data/intermediate/spatiotemporal_df.csv
   adj_mat_filename: grab_data/intermediate/adj_mat.csv
-  model_dir: grab_data/model
+  model_dir: grab_data/model_info
   output_filename: grab_data/intermediate/dcrnn_predictions.npz
   pred_arr2d_filename: grab_data/intermediate/dcrnn_pred_arr2d.csv
   pred_df_filename: grab_data/intermediate/dcrnn_pred_df.csv
   pred_long_filename: grab_data/output/dcrnn_pred_output.csv
 timestep_size_in_min: 15
 data:
-  test_samples_per_epoch: 1
+  test_samples_per_epoch: 24
   val_samples_per_epoch: 0
-  train_samples_per_epoch: 12
+  train_samples_per_epoch: 5760
   test_batch_size: 1
   val_batch_size: 1
-  train_batch_size: 12
+  train_batch_size: 24
   target_train_samples: 1200
   add_time_in_day: true
   add_day_of_week: false
   scale: false
+  min_output_value: 3.092217238e-09
+  max_output_value: 1.0
+
 model:
   activation: tanh
   output_activation: 
@@ -69,6 +72,6 @@ train:
   - 40
   - 50
   test_every_n_epochs: 1
-  loss_func: rmse
+  loss_func: mae
 use_cpu_only: false
-log_level: DEBUG
+log_level: INFO
