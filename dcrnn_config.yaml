@@ -21,7 +21,7 @@ paths:
   pred_long_filename: grab_data/output/dcrnn_pred_output.csv
 timestep_size_in_min: 15
 data:
-  test_samples_per_epoch: 24
+  test_samples_per_epoch: 96
   val_samples_per_epoch: 0
   train_samples_per_epoch: 5760
   test_batch_size: 1
