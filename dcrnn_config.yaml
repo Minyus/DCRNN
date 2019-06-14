@@ -63,7 +63,7 @@ train:
   - 240
   - 320
   - 400
-  cosine_decay_steps: 200
+  cosine_decay_steps: 150
   epsilon: 0.001
   max_grad_norm: 5
   max_to_keep: 100

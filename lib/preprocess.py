@@ -311,13 +311,7 @@ def generate_train_val_test(args, df=None):
                 df.to_csv(traffic_df_path.with_suffix('.csv').__str__(), sep=',')
         else:
             sep = ',' if traffic_df_path.suffix in ['.csv'] else ' '
-            if args.timestep_size_in_min > 0:
-                df = pd.read_csv(args.paths['traffic_df_filename'], index_col=False, sep=sep)
-                df['timestamp'] = \
-                    pd.date_range(start='1970-01-01', periods=df.shape[0], freq=args.timestep_size_freq)
-                df = df.set_index('timestamp')
-            else:
-                df = pd.read_csv(args.paths['traffic_df_filename'], index_col=0, parse_dates=[0], sep=sep)
+            df = pd.read_csv(args.paths['traffic_df_filename'], index_col=0, parse_dates=[0], sep=sep)
 
     args.datetime_start = df.index.values[0]
     args.datetime_latest = get_datetime_latest(args, df)
