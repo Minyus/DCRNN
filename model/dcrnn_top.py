@@ -42,7 +42,7 @@ def train_dcrnn(args, dataloaders, adj_mx):
         tf_config = setup_tf(args)
         with tf.Session(config=tf_config) as sess:
             supervisor = \
-                DCRNNSupervisor(sess, adj_mx=adj_mx, dataloaders=dataloaders, **args)
+                DCRNNSupervisor(sess, adj_mx, dataloaders, args)
             supervisor.train(sess)
     return args
 
@@ -56,7 +56,7 @@ def run_dcrnn(args, dataloaders, adj_mx, node_ids):
         tf_config = setup_tf(args)
         with tf.Session(config=tf_config) as sess:
             supervisor = \
-                DCRNNSupervisor(sess, adj_mx=adj_mx, dataloaders=dataloaders, **args)
+                DCRNNSupervisor(sess, adj_mx, dataloaders, args)
             outputs = supervisor.evaluate(sess)
         np.savez_compressed(args.paths['output_filename'], **outputs)
 

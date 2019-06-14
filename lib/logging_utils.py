@@ -1,12 +1,11 @@
-from logging import basicConfig, FileHandler, StreamHandler
+from logging import FileHandler, StreamHandler
 from logging import getLogger, Formatter
-
-logger = getLogger('dcrnn')
-
 from pathlib import Path
 
 
 def config_logging(args, log_filename='info.log'):
+    logger = getLogger(__name__)
+
     level = args.get('log_level', 'INFO')
     log_sep = '|'
     format_str = log_sep.join(['%(asctime)s',
@@ -28,5 +27,7 @@ def config_logging(args, log_filename='info.log'):
             file_handler = FileHandler(log_file_path)
             file_handler.setFormatter(Formatter(format_str))
             logger.addHandler(file_handler)
+
+    return logger
 
 

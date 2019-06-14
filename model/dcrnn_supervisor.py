@@ -14,19 +14,13 @@ from lib.metrics import masked_mae_loss, masked_rmse_loss, masked_mse_loss
 
 from model.dcrnn_model import DCRNNModel
 
-from logging import getLogger
-
-logger = getLogger('dcrnn')
-logger.propagate = False
-
 
 class DCRNNSupervisor(object):
     """
     Do experiments using Graph Random Walk RNN model.
     """
 
-    def __init__(self, sess, adj_mx, dataloaders, **kwargs):
-
+    def __init__(self, sess, adj_mx, dataloaders, kwargs):
         self._kwargs = kwargs
         self._data_kwargs = kwargs.get('data')
         self._model_kwargs = kwargs.get('model')
@@ -42,9 +36,9 @@ class DCRNNSupervisor(object):
         # Data preparation
         self._data = dataloaders
 
-        for k, v in self._data.items():
-            if hasattr(v, 'shape'):
-                logger.info((k, v.shape))
+        # for k, v in self._data.items():
+        #     if hasattr(v, 'shape'):
+        #         self._kwargs.logger.info((k, v.shape))
 
         # Build models.
         scaler = self._data['scaler']
@@ -116,16 +110,16 @@ class DCRNNSupervisor(object):
         model_filename = self._paths_kwargs.get('model_filename')
         if model_filename is not None:
             self._saver.restore(sess, model_filename)
-            logger.info('Pretrained model was loaded from : {}'.format(model_filename))
+            self._kwargs.logger.info('Pretrained model was loaded from : {}'.format(model_filename))
         else:
             sess.run(tf.global_variables_initializer())
 
         # Log model statistics.
         total_trainable_parameter = utils.get_total_trainable_parameter_size()
-        logger.info('Total number of trainable parameters: {:d}'.\
+        self._kwargs.logger.info('Total number of trainable parameters: {:d}'.\
                           format(total_trainable_parameter))
         for var in tf.global_variables():
-            logger.debug('{}, {}'.format(var.name, var.get_shape()))
+            self._kwargs.logger.debug('{}, {}'.format(var.name, var.get_shape()))
 
     @staticmethod
     def _get_log_dir(kwargs):
@@ -185,7 +179,7 @@ class DCRNNSupervisor(object):
 
             train_steps_per_epoch = self._data_kwargs.get('train_steps_per_epoch', 1)
             target_train_steps = self._data_kwargs.get('target_train_steps', 1000000)
-            logger.debug('Completed {} step: {:06d}/{:06d}|global step {:06d}/{:06d}|loss:{}|metric:{}'.\
+            self._kwargs.logger.debug('Completed {} step: {:06d}/{:06d}|global step {:06d}/{:06d}|loss:{}|metric:{}'.\
                                format('training' if training else 'validation',
                                       step_i + 1, train_steps_per_epoch,
                                       v['global_step'], target_train_steps, v['loss'], v['metric']))
@@ -231,7 +225,7 @@ class DCRNNSupervisor(object):
             self._epoch = self._global_step // self._data_kwargs['train_steps_per_epoch']
             # self._target_train_samples = self._data_kwargs['target_train_samples']
 
-            logger.info('Global step: {} / {} | epoch: {}'.\
+            self._kwargs.logger.info('Global step: {} / {} | epoch: {}'.\
                               format(self._global_step, target_train_steps, self._epoch))
 
             # Learning rate schedule.
@@ -247,7 +241,7 @@ class DCRNNSupervisor(object):
             train_loss = train_results['loss']
             train_metric = train_results['metric']
             if train_loss > 1e5:
-                logger.warning('Gradient explosion detected. Ending...')
+                self._kwargs.logger.warning('Gradient explosion detected. Ending...')
                 break
 
             global_step = sess.run(tf.train.get_or_create_global_step())
@@ -275,27 +269,27 @@ class DCRNNSupervisor(object):
             end_time = time.time()
 
             message = \
-                ('Epoch: {:6d}|global step: {:6d}/{:6d}|' + 
-                 'train_loss: {:8.5f}|train_metric: {:8.5f}|val_loss: {:8.5f}|val_metric: {:8.5f}' +
+                ('Epoch: {:6d}|global step: {:6d}/{:6d}|' +
+                 'train_loss: {:8.5f}|train_metric: {:8.5f}|val_loss: {:8.5f}|val_metric: {:8.5f}|' +
                  'lr:{:.6f}|{:.0f}s/epoch').\
                 format(self._epoch, global_step, target_train_steps,
                        train_loss, train_metric, val_loss, val_metric,
                        new_lr, (end_time - start_time))
-            logger.info(message)
+            self._kwargs.logger.info(message)
             if self._epoch % test_every_n_epochs == test_every_n_epochs - 1:
                 self.evaluate(sess)
             if val_metric <= min_val_metric:
                 wait = 0
                 if save_model > 0:
                     model_filename = self.save(sess, val_metric)
-                logger.info(
+                self._kwargs.logger.info(
                     'Val metric decrease from {:8.5f} to {:8.5f}. The model was saved at: {}'.\
                     format(min_val_metric, val_metric, model_filename))
                 min_val_metric = val_metric
             else:
                 wait += 1
                 if wait > patience:
-                    logger.warning('Early stopping at epoch: {}'.format(self._epoch))
+                    self._kwargs.logger.warning('Early stopping at epoch: {}'.format(self._epoch))
                     break
 
             history.append(val_loss)
@@ -304,7 +298,7 @@ class DCRNNSupervisor(object):
 
             sys.stdout.flush()
             if global_step >= self._train_kwargs.get('target_train_steps', 1000000):
-                logger.info('Finish training since the global step reached: {}'.\
+                self._kwargs.logger.info('Finish training since the global step reached: {}'.\
                                   format(global_step))
                 break
         return np.min(history)
@@ -338,7 +332,7 @@ class DCRNNSupervisor(object):
         max_output_value = self._data_kwargs.get('max_output_value')
         clip = (min_output_value is not None) or (max_output_value is not None)
         if clip:
-            logger.info('The output values are clipped to range: [{}, {}]'.\
+            self._kwargs.logger.info('The output values are clipped to range: [{}, {}]'.\
                               format(min_output_value, max_output_value))
 
         for horizon_i in range(y_truths.shape[1]):
@@ -348,13 +342,13 @@ class DCRNNSupervisor(object):
                     np.clip(y_pred_original, min_output_value, max_output_value,
                             out=y_pred_original)
             y_preds_original.append(y_pred_original)
-            logger.info(stat_str(y_pred_original, horizon_i, 'pred'))
+            self._kwargs.logger.info(stat_str(y_pred_original, horizon_i, 'pred'))
 
             y_truth_original = scaler.inverse_transform(y_truths[:, horizon_i, :, 0])
             y_truths_original.append(y_truth_original)
 
             if not np.all(np.isnan(y_truth_original)):
-                logger.info(stat_str(y_truth_original, horizon_i, 'true'))
+                self._kwargs.logger.info(stat_str(y_truth_original, horizon_i, 'true'))
 
                 for null_val in [0, np.nan]:
                     desc = r'0 excl.' if null_val == 0 else 'any    '
@@ -363,7 +357,7 @@ class DCRNNSupervisor(object):
                     mae = metrics.masked_mae_np(y_pred_original, y_truth_original, null_val=null_val)
                     mape = metrics.masked_mape_np(y_pred_original, y_truth_original, null_val=null_val) \
                         if null_val == 0 else np.nan
-                    logger.info(
+                    self._kwargs.logger.info(
                         "T+{:02d}|{}|RMSE: {:8.5f}|R2: {:8.4f}|MAE: {:5.2f}|MAPE: {:5.3f}|".\
                             format(horizon_i + 1, desc, rmse, r2, mae, mape,)
                         )

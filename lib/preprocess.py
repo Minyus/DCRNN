@@ -15,14 +15,9 @@ import numpy as np
 import geohash
 from geopy.distance import great_circle
 
-from lib.logging_utils import config_logging
 from lib.utils import load_graph_data, StandardScaler
 from lib.array_utils import get_seq_len, ex_partitioned_reduce_mean, broadcast_last_dim
-
-from logging import getLogger
-
-logger = getLogger('dcrnn')
-logger.propagate = False
+from lib.logging_utils import config_logging
 
 
 def get_geo_df(s_df):
@@ -137,8 +132,8 @@ def setup_dataloader(arr3d,
                      scale,
                      add_time_in_day,
                      add_day_of_week,
+                     logger,
                      ):
-
     assert test_samples >= 1
     assert val_samples >= 0
 
@@ -287,6 +282,7 @@ class SpatioTemporalDataLoader(object):
 
 
 def get_datetime_latest(args, df):
+    logger = args.logger
     if args.latest_timepoint['day_hour_min_option']['set_day_hour_min']:
         d = args.latest_timepoint['day_hour_min_option']['day']
         h = args.latest_timepoint['day_hour_min_option']['hour']
@@ -305,7 +301,7 @@ def get_datetime_latest(args, df):
 
 
 def generate_train_val_test(args, df=None):
-
+    logger = args.logger
     if df is None:
         traffic_df_path = Path(args.paths['traffic_df_filename'])
         if traffic_df_path.suffix in ['.h5', '.hdf5']:
@@ -337,9 +333,6 @@ def generate_train_val_test(args, df=None):
 
     arr2d = df.values.astype(np.float32)
     arr2d_list = [arr2d]
-
-    # _day_arr1d = df.index.values.astype("datetime64[D]")
-    # time_in_day_arr1d = (df.index.values - _day_arr1d) / np.timedelta64(1, "D")
 
     # Note: extract the fractional part (time) after reduce_mean
     days_arr1d = ((df.index - datetime(1970, 1, 1)).total_seconds() / \
@@ -383,6 +376,7 @@ def generate_train_val_test(args, df=None):
         scale=args.data['scale'],
         add_time_in_day=args.data['add_time_in_day'],
         add_day_of_week=args.data['add_day_of_week'],
+        logger = args.logger,
         )
 
     args.data['train_steps_per_epoch'] = \
@@ -399,11 +393,12 @@ def preprocess(args, show=True):
             else path_str
         os.makedirs(parent_str, exist_ok=True)
 
+    logger = config_logging(args)
+
     logger.info('Started preprocessing.')
     logger.info('Arguments read from the yaml file: \n' + pformat(args))
 
-    config_logging(args)
-
+    args.logger = logger
     config_filepath = args.paths.get('config_filepath')
     if config_filepath:
         shutil.copy2(config_filepath, args.paths['model_dir'])
