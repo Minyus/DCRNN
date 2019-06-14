@@ -211,26 +211,28 @@ class DCRNNSupervisor(object):
         kwargs.update(self._train_kwargs)
         return self._train(sess, **kwargs)
 
-    def _train(self, sess, base_lr, steps, patience=50,
+    def _train(self, sess, base_lr, lr_decay_steps, patience=50,
                min_learning_rate=2e-6, lr_decay_ratio=0.1, save_model=1,
-               test_every_n_epochs=10, **train_kwargs):
+               test_every_n_epochs=10, cosine_decay_steps=None, **kwargs):
         history = []
         min_val_metric = float('inf')
         wait = 0
         target_train_steps = self._data_kwargs.get('target_train_steps', 1000000)
 
-        while True: # self._epoch <= epochs:
+        while True:
 
             self._global_step = sess.run(tf.train.get_or_create_global_step())
             self._epoch = self._global_step // self._data_kwargs['train_steps_per_epoch']
-            # self._target_train_samples = self._data_kwargs['target_train_samples']
 
             self._kwargs.logger.info('Global step: {} / {} | epoch: {}'.\
                               format(self._global_step, target_train_steps, self._epoch))
 
             # Learning rate schedule.
-            new_lr = max(min_learning_rate,
-                         base_lr * (lr_decay_ratio ** np.sum(self._epoch >= np.array(steps))))
+            new_lr = base_lr * (lr_decay_ratio ** np.sum(self._global_step >= np.array(lr_decay_steps))) \
+                if cosine_decay_steps is None \
+                else sess.run(tf.train.cosine_decay(learning_rate=base_lr, global_step=self._global_step,
+                                           decay_steps=cosine_decay_steps))
+            new_lr = max(min_learning_rate, new_lr)
             self.set_lr(sess=sess, lr=new_lr)
 
             start_time = time.time()
@@ -259,11 +261,13 @@ class DCRNNSupervisor(object):
                                       'metric/train_metric',
                                       'loss/val_loss',
                                       'metric/val_metric',
+                                      'learning_rate',
                                       ],
                                      [train_loss,
                                       train_metric,
                                       val_loss,
                                       val_metric,
+                                      new_lr,
                                       ],
                                      global_step=global_step)
             end_time = time.time()
@@ -297,7 +301,7 @@ class DCRNNSupervisor(object):
             self._epoch += 1
 
             sys.stdout.flush()
-            if global_step >= self._train_kwargs.get('target_train_steps', 1000000):
+            if global_step >= self._data_kwargs.get('target_train_steps', 1000000):
                 self._kwargs.logger.info('Finish training since the global step reached: {}'.\
                                   format(global_step))
                 break
@@ -375,7 +379,7 @@ class DCRNNSupervisor(object):
 
     def save(self, sess, metric):
         global_step = sess.run(tf.train.get_or_create_global_step())
-        metric_func = self._kwargs.get('metric_func', 'mae')
+        metric_func = self._kwargs['train'].get('metric_func', 'mae')
         prefix = os.path.join(self._log_dir, 'model_{}{:09.7f}'.format(metric_func, metric))
         model_filename = \
             self._saver.save(sess, prefix, global_step=global_step, write_meta_graph=False)

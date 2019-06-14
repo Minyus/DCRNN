@@ -27,8 +27,8 @@ data:
   test_batch_size: 12
   val_batch_size: 12
   train_batch_size: 12
-  target_train_samples: 4416
-  add_time_in_day: true
+  target_train_samples: 44160
+  add_time_in_day: false
   add_day_of_week: false
   scale: false
   min_output_value: 3.092217238e-09
@@ -55,22 +55,27 @@ model:
     - 568
   use_curriculum_learning: true
 train:
+  min_learning_rate: 1.0e-06
   base_lr: 0.01
-  dropout: 0
-  epsilon: 0.001
   lr_decay_ratio: 0.1
+  lr_decay_steps:
+  - 160
+  - 240
+  - 320
+  - 400
+  cosine_decay_steps: 200
+  epsilon: 0.001
   max_grad_norm: 5
   max_to_keep: 100
-  min_learning_rate: 2.0e-06
+  
   optimizer: adam
   patience: 50
-  steps:
-  - 20
-  - 30
-  - 40
-  - 50
+
   test_every_n_epochs: 1
   loss_func: rmse
   metric_func: rmse
-use_cpu_only: false
 log_level: INFO
+tf_config:
+  use_cpu_only: false
+  allow_gpu_memory_growth: false
+  jit_compilation: false

@@ -30,9 +30,12 @@ def get_model_filename(args):
 def setup_tf(args):
     tf.reset_default_graph()
     tf_config = tf.ConfigProto()
-    if args.use_cpu_only:
-        tf_config = tf.ConfigProto(device_count={'GPU': 0})
-    tf_config.gpu_options.allow_growth = True
+    if args.tf_config:
+        if args.tf_config.get('use_cpu_only'):
+            tf_config = tf.ConfigProto(device_count={'GPU': 0})
+        tf_config.gpu_options.allow_growth = args.tf_config.get('allow_gpu_memory_growth', True)
+        if args.tf_config.get('jit_compilation', False):
+            tf_config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
     return tf_config
 
 
