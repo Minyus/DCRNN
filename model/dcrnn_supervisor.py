@@ -40,11 +40,8 @@ class DCRNNSupervisor(object):
         self._writer = tf.summary.FileWriter(self._log_dir)
 
         # Data preparation
-        STDATALOADER = True
-        if STDATALOADER:
-            self._data = dataloaders
-        if not STDATALOADER:
-            self._data = utils.load_dataset(**self._data_kwargs)
+        self._data = dataloaders
+
         for k, v in self._data.items():
             if hasattr(v, 'shape'):
                 logger.info((k, v.shape))
@@ -53,24 +50,21 @@ class DCRNNSupervisor(object):
         scaler = self._data['scaler']
         with tf.name_scope('Train'):
             with tf.variable_scope('DCRNN', reuse=False):
-                train_batch_size = dataloaders['train_loader'].batch_size if STDATALOADER \
-                    else self._data_kwargs['batch_size']
+                train_batch_size = dataloaders['train_loader'].batch_size
                 self._train_model = DCRNNModel(is_training=True, scaler=scaler,
                                                batch_size=train_batch_size,
                                                adj_mx=adj_mx, **self._model_kwargs)
 
         with tf.name_scope('Val'):
             with tf.variable_scope('DCRNN', reuse=True):
-                val_batch_size = dataloaders['val_loader'].batch_size if STDATALOADER \
-                    else self._data_kwargs['val_batch_size']
+                val_batch_size = dataloaders['val_loader'].batch_size
                 self._val_model = DCRNNModel(is_training=False, scaler=scaler,
                                               batch_size=val_batch_size,
                                               adj_mx=adj_mx, **self._model_kwargs)
 
         with tf.name_scope('Test'):
             with tf.variable_scope('DCRNN', reuse=True):
-                test_batch_size = dataloaders['test_loader'].batch_size if STDATALOADER \
-                    else self._data_kwargs['test_batch_size']
+                test_batch_size = dataloaders['test_loader'].batch_size
                 self._test_model = DCRNNModel(is_training=False, scaler=scaler,
                                               batch_size=test_batch_size,
                                               adj_mx=adj_mx, **self._model_kwargs)
@@ -135,32 +129,7 @@ class DCRNNSupervisor(object):
 
     @staticmethod
     def _get_log_dir(kwargs):
-        # log_dir = kwargs['train'].get('log_dir')
         log_dir = kwargs['paths']['model_dir']
-
-        if 0: # TODO: remove
-        # if log_dir is None:
-            batch_size = kwargs['data'].get('train_batch_size')
-            learning_rate = kwargs['train'].get('base_lr')
-            max_diffusion_step = kwargs['model'].get('max_diffusion_step')
-            num_rnn_layers = kwargs['model'].get('num_rnn_layers')
-            rnn_units = kwargs['model'].get('rnn_units')
-            structure = '-'.join(
-                ['%d' % rnn_units for _ in range(num_rnn_layers)])
-            horizon = kwargs['model'].get('horizon')
-            filter_type = kwargs['model'].get('filter_type')
-            filter_type_abbr = 'L'
-            if filter_type == 'random_walk':
-                filter_type_abbr = 'R'
-            elif filter_type == 'dual_random_walk':
-                filter_type_abbr = 'DR'
-            run_id = 'dcrnn_%s_%d_h_%d_%s_lr_%g_bs_%d_%s/' % (
-                filter_type_abbr, max_diffusion_step, horizon,
-                structure, learning_rate, batch_size,
-                time.strftime('%m%d%H%M%S'))
-            base_dir = kwargs.get('base_dir')
-            log_dir = os.path.join(base_dir, run_id)
-
         if not os.path.exists(log_dir):
             os.makedirs(log_dir)
         return log_dir
@@ -357,11 +326,7 @@ class DCRNNSupervisor(object):
 
         scaler = self._data['scaler']
 
-        STDATALOADER = True
-        if STDATALOADER:
-            y_truths = np.concatenate(test_results['ground_truths'], axis=0)
-        if not STDATALOADER:
-            y_truths = self._data['y_test']
+        y_truths = np.concatenate(test_results['ground_truths'], axis=0)
 
         assert y_preds.shape[:3] == y_truths.shape[:3], \
             'NOT {} == {}'.format(y_preds.shape[:3], y_truths.shape[:3])

@@ -16,7 +16,7 @@ import geohash
 from geopy.distance import great_circle
 
 from lib import utils
-from lib.utils import load_graph_data
+from lib.utils import load_graph_data, StandardScaler
 from lib.array_utils import get_seq_len, ex_partitioned_reduce_mean, broadcast_last_dim
 
 from logging import getLogger
@@ -284,21 +284,6 @@ class SpatioTemporalDataLoader(object):
         return _wrapper()
 
 
-class StandardScaler:
-    """
-    Standard the input
-    """
-
-    def __init__(self, mean, std, scale=True):
-        self.mean = mean
-        self.std = std
-        self.scale = scale
-
-    def transform(self, data):
-        return (data - self.mean) / self.std if self.scale else data
-
-    def inverse_transform(self, data):
-        return (data * self.std) + self.mean if self.scale else data
 
 
 def get_datetime_latest(args, df):
@@ -411,8 +396,6 @@ def preprocess(args, show=True):
     for path_str in args.paths.values():
         parent_str = Path(path_str).parent.__str__()
         os.makedirs(parent_str, exist_ok=True)
-
-    # logger = utils.get_logger(args.paths['model_dir'], __name__, level=args.get('log_level', 'INFO'))
 
     logger.info('Started preprocessing.')
     logger.info('Arguments read from the yaml file: \n' + pformat(args))
