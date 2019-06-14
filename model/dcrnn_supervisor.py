@@ -275,10 +275,10 @@ class DCRNNSupervisor(object):
             end_time = time.time()
 
             message = \
-                ('Epoch: {:6d}/{:6d}|global step: {:6d}/{:6d}|' + \
-                 'train_loss: {:8.5f}|train_metric: {:8.5f}|val_loss: {:8.5f}|val_metric: {:8.5f}' + \
-                'lr:{:.6f}|{:.0f}s/epoch').\
-                format(self._epoch, epochs, global_step, target_train_steps,
+                ('Epoch: {:6d}|global step: {:6d}/{:6d}|' + 
+                 'train_loss: {:8.5f}|train_metric: {:8.5f}|val_loss: {:8.5f}|val_metric: {:8.5f}' +
+                 'lr:{:.6f}|{:.0f}s/epoch').\
+                format(self._epoch, global_step, target_train_steps,
                        train_loss, train_metric, val_loss, val_metric,
                        new_lr, (end_time - start_time))
             logger.info(message)
