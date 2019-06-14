@@ -15,7 +15,7 @@ import numpy as np
 import geohash
 from geopy.distance import great_circle
 
-from lib import utils
+from lib.logging_utils import config_logging
 from lib.utils import load_graph_data, StandardScaler
 from lib.array_utils import get_seq_len, ex_partitioned_reduce_mean, broadcast_last_dim
 
@@ -394,11 +394,15 @@ def generate_train_val_test(args, df=None):
 
 def preprocess(args, show=True):
     for path_str in args.paths.values():
-        parent_str = Path(path_str).parent.__str__()
+        parent_str = Path(path_str).parent.__str__() \
+            if Path(path_str).suffix.__len__() > 0 \
+            else path_str
         os.makedirs(parent_str, exist_ok=True)
 
     logger.info('Started preprocessing.')
     logger.info('Arguments read from the yaml file: \n' + pformat(args))
+
+    config_logging(args)
 
     config_filepath = args.paths.get('config_filepath')
     if config_filepath:

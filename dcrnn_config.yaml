@@ -7,7 +7,7 @@ latest_timepoint:
   timestamp_option:
     set_timestamp: false
     timestamp:
-test_only: true
+test_only: false
 paths:
   source_table_dir: grab_data/input/
   geohash6_filename: grab_data/intermediate/geohash6.csv
@@ -21,11 +21,11 @@ paths:
   pred_long_filename: grab_data/output/output.csv
 timestep_size_in_min: 15
 data:
-  test_samples_per_epoch: 1
+  test_samples_per_epoch: 96
   val_samples_per_epoch: 0
   train_samples_per_epoch: 96
-  test_batch_size: 1
-  val_batch_size: 1
+  test_batch_size: 12
+  val_batch_size: 12
   train_batch_size: 12
   target_train_samples: 4416
   add_time_in_day: true
@@ -57,8 +57,6 @@ model:
 train:
   base_lr: 0.01
   dropout: 0
-#  epoch: 0
-#  epochs: 10000
   epsilon: 0.001
   lr_decay_ratio: 0.1
   max_grad_norm: 5
@@ -72,7 +70,7 @@ train:
   - 40
   - 50
   test_every_n_epochs: 1
-  loss_func: mae
+  loss_func: rmse
   metric_func: rmse
 use_cpu_only: false
 log_level: INFO
