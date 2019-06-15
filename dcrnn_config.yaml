@@ -32,7 +32,7 @@ data:
   min_output_value: 3.092217238e-09
   max_output_value: 1.0
 supplemental_features:
-  add_time_in_day: true
+  add_time_in_day: false
   add_day_of_week: false
   add_hist_dow_hour_mean: false
 model:
@@ -52,8 +52,8 @@ model:
     seq_len_list:
     - 8
     - 96
-    - 672
-    - 568
+    - 1056
+    - 184
   use_curriculum_learning: true
 train:
   min_learning_rate: 2.0e-06
@@ -64,7 +64,7 @@ train:
   - 240
   - 320
   - 400
-  linear_cosine_decay_steps: 200
+  linear_cosine_decay_steps: 300
   epsilon: 0.001
   max_grad_norm: 5
   max_to_keep: 100
@@ -80,3 +80,5 @@ tf_config:
   use_cpu_only: false
   allow_gpu_memory_growth: false
   jit_compilation: false
+  save_tensors: true
+  trace: true

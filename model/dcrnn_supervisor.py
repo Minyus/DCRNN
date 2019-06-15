@@ -26,6 +26,10 @@ class DCRNNSupervisor(object):
         self._model_kwargs = kwargs.get('model')
         self._train_kwargs = kwargs.get('train')
         self._paths_kwargs = kwargs.get('paths')
+        self._save_tensors = kwargs.get('tf_config').get('save_tensors', False) \
+            if kwargs.get('tf_config') else False
+        self._trace = kwargs.get('tf_config').get('trace', False) \
+            if kwargs.get('tf_config') else False
 
         # logging.
         self._log_dir = self._get_log_dir(kwargs)
@@ -130,8 +134,9 @@ class DCRNNSupervisor(object):
 
     def run_epoch_generator(self, sess, model, data_generator,
                             return_output=False,
-                            training=False, writer=None,
-                            return_ground_truth=False):
+                            training=False,
+                            return_ground_truth=False,
+                            task=''):
         losses = []
         metrics = []
         outputs = []
@@ -146,15 +151,15 @@ class DCRNNSupervisor(object):
             'loss': loss,
             'metric': metric,
             'global_step': tf.train.get_or_create_global_step()
-        }
+            }
         if training:
             fetches.update({
                 'train_op': self._train_op
             })
+        if self._save_tensors:
             merged = model.merged
             if merged is not None:
                 fetches.update({'merged': merged})
-
         if return_output:
             fetches.update({
                 'outputs': model.outputs
@@ -166,12 +171,23 @@ class DCRNNSupervisor(object):
                 model.labels: y,
             }
 
-            v = sess.run(fetches, feed_dict=feed_dict)
+            if self._trace:
+                run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+                run_metadata = tf.RunMetadata()
+                v = sess.run(fetches, feed_dict=feed_dict,
+                             options=run_options, run_metadata=run_metadata)
+                tag = '{}_step{}'.format(task, step_i)
+                self._writer.add_run_metadata(run_metadata, tag,
+                                        global_step=v['global_step'])
+            else:
+                v = sess.run(fetches, feed_dict=feed_dict)
+
+            if self._save_tensors and 'merged' in v:
+                self._writer.add_summary(v['merged'], global_step=v['global_step'])
 
             losses.append(v['loss'])
             metrics.append(v['metric'])
-            if writer is not None and 'merged' in v:
-                writer.add_summary(v['merged'], global_step=v['global_step'])
+
             if return_output:
                 outputs.append(v['outputs'])
             if return_ground_truth:
@@ -245,7 +261,7 @@ class DCRNNSupervisor(object):
             train_results = self.run_epoch_generator(sess, self._train_model,
                                                      self._data['train_loader'].get_iterator(),
                                                      training=True,
-                                                     writer=self._writer)
+                                                     task='train')
             train_loss = train_results['loss']
             train_metric = train_results['metric']
             if train_loss > 1e5:
@@ -256,7 +272,8 @@ class DCRNNSupervisor(object):
             # Compute validation error.
             val_results = self.run_epoch_generator(sess, self._val_model,
                                                    self._data['val_loader'].get_iterator(),
-                                                   training=False)
+                                                   training=False,
+                                                   task='val')
             # val_loss = np.asscalar(val_results['loss'])
             # val_metric = np.asscalar(val_results['metric'])
             val_loss = val_results['loss']
@@ -327,7 +344,8 @@ class DCRNNSupervisor(object):
                                                 self._data['test_loader'].get_iterator(),
                                                 return_output=True,
                                                 training=False,
-                                                return_ground_truth=True)
+                                                return_ground_truth=True,
+                                                task='test')
 
         test_loss = test_results['loss']
         # utils.add_simple_summary(self._writer, ['loss/test_loss'], [test_loss],
