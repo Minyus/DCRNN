@@ -44,6 +44,13 @@ def add_simple_summary(writer, names, values, global_step):
         writer.add_summary(summary, global_step)
 
 
+def add_summary_dict(writer, summary_dict={}, global_step=0):
+    summary_value_list = \
+        [tf.Summary.Value(tag=t, simple_value=v) for (t, v) in summary_dict.items()]
+    summary_to_add = tf.Summary(value=summary_value_list)
+    writer.add_summary(summary_to_add, global_step)
+
+
 def calculate_normalized_laplacian(adj):
     """
     # L = D^-1/2 (D-A) D^-1/2 = I - D^-1/2 A D^-1/2

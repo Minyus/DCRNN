@@ -32,9 +32,9 @@ data:
   min_output_value: 3.092217238e-09
   max_output_value: 1.0
 supplemental_features:
-  add_time_in_day: false
+  add_time_in_day: true
   add_day_of_week: false
-  add_hist_dow_hour_mean: true
+  add_hist_dow_hour_mean: false
 model:
   activation: tanh
   output_activation: 
@@ -56,8 +56,8 @@ model:
     - 568
   use_curriculum_learning: true
 train:
-  min_learning_rate: 1.0e-05
-  base_lr: 0.1
+  min_learning_rate: 2.0e-06
+  base_lr: 0.02
   lr_decay_ratio: 0.1
   lr_decay_steps:
   - 160

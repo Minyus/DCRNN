@@ -232,6 +232,7 @@ class DCRNNSupervisor(object):
                 new_lr = base_lr * (lr_decay_ratio ** np.sum(self._global_step >= np.array(lr_decay_steps)))
                 new_lr = max(min_learning_rate, new_lr)
             else:
+                linear_cosine_decay_steps = float(linear_cosine_decay_steps)
                 new_lr =\
                     sess.run(tf.train.linear_cosine_decay(learning_rate=base_lr,
                                                           global_step=self._global_step,
@@ -261,20 +262,28 @@ class DCRNNSupervisor(object):
             val_loss = val_results['loss']
             val_metric = val_results['metric']
 
-            utils.add_simple_summary(self._writer,
-                                     ['loss/train_loss',
-                                      'metric/train_metric',
-                                      'loss/val_loss',
-                                      'metric/val_metric',
-                                      'learning_rate/learning_rate',
-                                      ],
-                                     [train_loss,
-                                      train_metric,
-                                      val_loss,
-                                      val_metric,
-                                      new_lr,
-                                      ],
-                                     global_step=global_step)
+            # utils.add_simple_summary(self._writer,
+            #                          ['loss/train_loss',
+            #                           'metric/train_metric',
+            #                           'loss/val_loss',
+            #                           'metric/val_metric',
+            #                           'learning_rate/learning_rate',
+            #                           ],
+            #                          [train_loss,
+            #                           train_metric,
+            #                           val_loss,
+            #                           val_metric,
+            #                           new_lr,
+            #                           ],
+            #                          global_step=global_step)
+            utils.add_summary_dict(self._writer, {
+                'loss/train_loss': train_loss,
+                'metric/train_metric': train_metric,
+                'loss/val_loss': val_loss,
+                'metric/val_metric': val_metric,
+                'learning_rate/learning_rate': new_lr,
+                }, global_step=global_step)
+
             end_time = time.time()
 
             message = \
@@ -321,8 +330,11 @@ class DCRNNSupervisor(object):
                                                 return_ground_truth=True)
 
         test_loss = test_results['loss']
-        utils.add_simple_summary(self._writer, ['loss/test_loss'], [test_loss],
-                                 global_step=global_step)
+        # utils.add_simple_summary(self._writer, ['loss/test_loss'], [test_loss],
+        #                          global_step=global_step)
+        utils.add_summary_dict(self._writer, {
+            'loss/test_loss': test_loss,
+            }, global_step=global_step)
 
         # y_preds:  a list of (batch_size, horizon, num_nodes, output_dim)
         y_preds = np.concatenate(test_results['outputs'], axis=0)
@@ -371,11 +383,17 @@ class DCRNNSupervisor(object):
                             format(horizon_i + 1, desc, rmse, r2, mae, mape,)
                         )
 
-                utils.add_simple_summary(self._writer,
-                                         ['%s_%d' % (item, horizon_i + 1) for item in
-                                          ['metric/rmse', 'metric/mape', 'metric/mae']],
-                                         [rmse, mape, mae],
-                                         global_step=global_step)
+                # utils.add_simple_summary(self._writer,
+                #                          ['%s_%d' % (item, horizon_i + 1) for item in
+                #                           ['metric/rmse', 'metric/mape', 'metric/mae']],
+                #                          [rmse, mape, mae],
+                #                          global_step=global_step)
+                utils.add_summary_dict(self._writer,{
+                    'metric/rmse_horizon{}'.format(horizon_i + 1): rmse,
+                    'metric/mape_horizon{}'.format(horizon_i + 1): mape,
+                    'metric/mae_horizon{}'.format(horizon_i + 1): mae,
+                    'metric/r2_horizon{}'.format(horizon_i + 1): r2,
+                    }, global_step=global_step)
         outputs = {
             'predictions': y_preds_original,
             'groundtruth': y_truths_original
