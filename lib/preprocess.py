@@ -124,43 +124,22 @@ def get_adj_mat(args, adj_mx=None):
 def setup_dataloader(arr3d,
                      seq_len,
                      horizon,
-                     test_samples,
-                     val_samples,
+                     length_dict,
                      train_batch_size,
                      val_batch_size,
                      test_batch_size,
                      scale,
-                     add_time_in_day,
-                     add_day_of_week,
+                     features,
                      logger,
                      ):
-    assert test_samples >= 1
-    assert val_samples >= 0
 
-    timesteps_per_sample = (sum(seq_len) if isinstance(seq_len, list) else seq_len) + horizon
+    train_length = length_dict['train_length']
+    val_length = length_dict['val_length']
+    test_length = length_dict['test_length']
 
-    test_timesteps = test_samples - 1 + timesteps_per_sample
-    val_timesteps = val_samples - 1 + timesteps_per_sample if val_samples > 0 else 0
-
-    assert test_samples >= test_batch_size, \
-        'test_samples: {} | test_batch_size:{}'.format(test_samples, test_batch_size)
-    assert val_samples == 0 or val_samples >= val_batch_size, \
-        'val_samples: {} | val_batch_size:{}'.format(val_samples, val_batch_size)
-
-    if val_timesteps == 0:
-        logger.warning('Test dataset will be used as validation dataset as well. '
-              'To use separate validation dataset, increase val_timesteps. ')
-
-    num_samples, num_nodes, _ = arr3d.shape
-
-    num_test = test_timesteps if test_timesteps <= num_samples else num_samples
-    num_val = val_timesteps if \
-        (test_timesteps + val_timesteps) <= num_samples else 0
-    num_train = num_samples - num_test - num_val
-
-    test_arr3d = arr3d[-num_test:]
-    val_arr3d = arr3d[num_train: num_train + num_val] if num_val > 0 else test_arr3d
-    train_arr3d = arr3d[:num_train]
+    test_arr3d = arr3d[-test_length:]
+    val_arr3d = arr3d[train_length: train_length + val_length] if val_length > 0 else test_arr3d
+    train_arr3d = arr3d[:train_length]
 
     train_arr2d = train_arr3d[:, :, 0]
     val_arr2d = val_arr3d[:, :, 0]
@@ -179,23 +158,23 @@ def setup_dataloader(arr3d,
     dataloaders = {}
     dataloaders['test_loader'] = \
         SpatioTemporalDataLoader(test_z_arr3d, test_batch_size, seq_len, horizon, shuffle=False,
-                                 add_time_in_day=add_time_in_day, add_day_of_week=add_day_of_week)
+                                 features=features)
     assert dataloaders['test_loader'].num_batch > 0, 'num_batch for test dataset should be > 0'
 
     dataloaders['val_loader'] = \
         SpatioTemporalDataLoader(val_z_arr3d, val_batch_size, seq_len, horizon, shuffle=False,
-                                 add_time_in_day=add_time_in_day, add_day_of_week=add_day_of_week)
+                                 features=features)
     dataloaders['train_loader'] = \
         SpatioTemporalDataLoader(train_z_arr3d, train_batch_size, seq_len, horizon, shuffle=True,
-                                 add_time_in_day=add_time_in_day, add_day_of_week=add_day_of_week)
+                                 features=features)
 
     dataloaders['scaler'] = scaler
     logger.info('[train]      | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
-          format(num_train, dataloaders['train_loader'].size, dataloaders['train_loader'].num_batch))
+          format(train_length, dataloaders['train_loader'].size, dataloaders['train_loader'].num_batch))
     logger.info('[validation] | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
-          format(num_val, dataloaders['val_loader'].size, dataloaders['val_loader'].num_batch))
+          format(val_length, dataloaders['val_loader'].size, dataloaders['val_loader'].num_batch))
     logger.info('[test]       | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
-          format(num_test, dataloaders['test_loader'].size, dataloaders['test_loader'].num_batch))
+          format(test_length, dataloaders['test_loader'].size, dataloaders['test_loader'].num_batch))
 
     return dataloaders
 
@@ -206,13 +185,12 @@ class SpatioTemporalDataLoader(object):
                  horizon,
                  shuffle=False,
                  pad_with_last_sample=False,
-                 add_time_in_day=False, add_day_of_week=False):
+                 features=None):
 
         self.seq_len = seq_len
         self.horizon = horizon
         self.batch_size = batch_size
-        self.add_time_in_day = add_time_in_day
-        self.add_day_of_week = add_day_of_week
+        self.features = features
         self.current_ind = 0
         self.size = max((arr3d.shape[0] - \
                          ((sum(seq_len) if isinstance(seq_len, list) else seq_len) + horizon) + 1), 0)
@@ -261,10 +239,10 @@ class SpatioTemporalDataLoader(object):
                                                          part_size_list=self.seq_len) \
                         if enable_seq_reducing \
                         else self.arr3d[i:hist_i]
-                    if self.add_time_in_day:
+                    if self.features.get('add_time_in_day'):
                         # extract the fractional part (time) to remove the integer part (day)
                         x_arr3d[..., 1] = x_arr3d[..., 1] % 1
-                    if self.add_day_of_week:
+                    if self.features.get('add_day_of_week'):
                         x_arr3d[..., -1] = np.floor(x_arr3d[..., -1]) % 7
 
                     x_arr3d_list.append(x_arr3d)
@@ -277,8 +255,6 @@ class SpatioTemporalDataLoader(object):
                 self.current_ind += 1
 
         return _wrapper()
-
-
 
 
 def get_datetime_latest(args, df):
@@ -300,8 +276,40 @@ def get_datetime_latest(args, df):
     return datetime_latest
 
 
+def aggregate_keeping_rows(df, agg_samples):
+    dt_df = df.copy()
+    dt_list = ['hour', 'dayofweek']
+    dt_df.loc[:, dt_list[0]] = dt_df.index.hour
+    dt_df.loc[:, dt_list[1]] = dt_df.index.dayofweek
+
+    agg_df = dt_df[:agg_samples].groupby(dt_list, as_index=False).mean()
+
+    dt_df.index.name = 'timestamp'
+
+    agg_df = pd.merge(dt_df.reset_index().drop(list(df.columns.values), axis=1), agg_df, how='left', on=dt_list)
+    agg_df = agg_df.set_index('timestamp')
+    agg_df = agg_df.drop(dt_list, axis=1)
+    return agg_df
+
+
 def generate_train_val_test(args, df=None):
     logger = args.logger
+
+    assert args.data['train_samples_per_epoch'] >= args.data['train_batch_size']
+    assert args.data['target_train_samples'] >= args.data['train_samples_per_epoch']
+
+    args.data['train_steps_per_epoch'] = \
+        args.data['train_samples_per_epoch'] // args.data['train_batch_size']
+    args.data['target_train_steps'] = \
+        args.data['target_train_samples'] // args.data['train_batch_size']
+
+    if args.model.get('seq_reducing') and \
+            args.model.get('seq_reducing').get('enable_seq_reducing'):
+        seq_len = args.model.get('seq_reducing').get('seq_len_list')
+        args.model['seq_len'] = get_seq_len(seq_len)
+    else:
+        seq_len = args.model['seq_len']
+
     if df is None:
         traffic_df_path = Path(args.paths['traffic_df_filename'])
         if traffic_df_path.suffix in ['.h5', '.hdf5']:
@@ -325,52 +333,75 @@ def generate_train_val_test(args, df=None):
     d_df = d_df.set_index('timestamp')
     df = pd.merge(d_df, df, how='left', left_index=True, right_index=True)
 
+    test_samples = args.data.get('test_samples_per_epoch')
+    val_samples = args.data.get('val_samples_per_epoch')
+    assert test_samples >= 1
+    assert val_samples >= 0
+
+    train_batch_size = args.data['train_batch_size']
+    val_batch_size = args.data['val_batch_size']
+    test_batch_size = args.data['test_batch_size']
+
+    assert test_samples >= test_batch_size, \
+        'test_samples: {} | test_batch_size:{}'.format(test_samples, test_batch_size)
+    assert val_samples == 0 or val_samples >= val_batch_size, \
+        'val_samples: {} | val_batch_size:{}'.format(val_samples, val_batch_size)
+
+    horizon = args.model['horizon']
+    timesteps_per_sample = (sum(seq_len) if isinstance(seq_len, list) else seq_len) + horizon
+
+    test_timesteps = test_samples - 1 + timesteps_per_sample
+    val_timesteps = val_samples - 1 + timesteps_per_sample if val_samples > 0 else 0
+
+    if val_timesteps == 0:
+        logger.warning('Test dataset will be used as validation dataset as well. '
+              'To use separate validation dataset, increase val_timesteps. ')
+
+    source_length, num_nodes = df.shape
+
+    test_length = test_timesteps if test_timesteps <= source_length else source_length
+    val_length = val_timesteps if \
+        (test_timesteps + val_timesteps) <= source_length else 0
+    train_length = source_length - test_length - val_length
+
+    length_dict = {'train_length': train_length,
+                   'val_length': val_length,
+                   'test_length': test_length}
+
     arr2d = df.values.astype(np.float32)
     arr2d_list = [arr2d]
 
     # Note: extract the fractional part (time) after reduce_mean
     days_arr1d = ((df.index - datetime(1970, 1, 1)).total_seconds() / \
                         timedelta(days=1).total_seconds()).astype(np.float32)
-    day_of_week_arr1d = df.index.dayofweek.astype(np.float32)
 
-    if args.data['add_time_in_day']:
-        arr2d_list.append(broadcast_last_dim(days_arr1d, arr2d.shape[-1]))
-    if args.data['add_day_of_week']:
-        arr2d_list.append(broadcast_last_dim(days_arr1d, arr2d.shape[-1]))
+    features = args.get('supplemental_features')
+    if features:
+        if features.get('add_time_in_day'):
+            arr2d_list.append(broadcast_last_dim(days_arr1d, arr2d.shape[-1]))
+        if features.get('add_hist_dow_hour_mean'):
+            arr2d_list.append(aggregate_keeping_rows(df, train_length).values.astype(np.float32))
+        if features.get('add_day_of_week'):
+            arr2d_list.append(broadcast_last_dim(days_arr1d, arr2d.shape[-1]))
 
     arr3d = np.stack(arr2d_list, axis=-1)
     num_samples, num_nodes, input_dim = arr3d.shape
+
     args.model['num_nodes'] = num_nodes
     args.model['input_dim'] = input_dim
     args.model['output_dim'] = 1
 
-    assert args.data['train_samples_per_epoch'] >= args.data['train_batch_size']
-    assert args.data['target_train_samples'] >= args.data['train_samples_per_epoch']
-
-    args.data['train_steps_per_epoch'] = \
-        args.data['train_samples_per_epoch'] // args.data['train_batch_size']
-    args.data['target_train_steps'] = \
-        args.data['target_train_samples'] // args.data['train_batch_size']
-
-    if args.model.get('seq_reducing') and \
-            args.model.get('seq_reducing').get('enable_seq_reducing'):
-        seq_len = args.model.get('seq_reducing').get('seq_len_list')
-        args.model['seq_len'] = get_seq_len(seq_len)
-    else:
-        seq_len = args.model['seq_len']
     dataloaders = setup_dataloader(
         arr3d,
         seq_len=seq_len,
-        horizon=args.model['horizon'],
-        test_samples=args.data['test_samples_per_epoch'],
-        val_samples=args.data['val_samples_per_epoch'],
-        train_batch_size=args.data['train_batch_size'],
-        val_batch_size=args.data['val_batch_size'],
-        test_batch_size=args.data['test_batch_size'],
+        horizon=horizon,
+        length_dict=length_dict,
+        train_batch_size=train_batch_size,
+        val_batch_size=val_batch_size,
+        test_batch_size=test_batch_size,
         scale=args.data['scale'],
-        add_time_in_day=args.data['add_time_in_day'],
-        add_day_of_week=args.data['add_day_of_week'],
-        logger = args.logger,
+        features=features,
+        logger=logger,
         )
 
     args.data['train_steps_per_epoch'] = \

@@ -213,7 +213,7 @@ class DCRNNSupervisor(object):
 
     def _train(self, sess, base_lr, lr_decay_steps, patience=50,
                min_learning_rate=2e-6, lr_decay_ratio=0.1, save_model=1,
-               test_every_n_epochs=10, cosine_decay_steps=None, **kwargs):
+               test_every_n_epochs=10, linear_cosine_decay_steps=None, **kwargs):
         history = []
         min_val_metric = float('inf')
         wait = 0
@@ -228,11 +228,16 @@ class DCRNNSupervisor(object):
                               format(self._global_step, target_train_steps, self._epoch))
 
             # Learning rate schedule.
-            new_lr = base_lr * (lr_decay_ratio ** np.sum(self._global_step >= np.array(lr_decay_steps))) \
-                if cosine_decay_steps is None \
-                else sess.run(tf.train.cosine_decay(learning_rate=base_lr, global_step=self._global_step,
-                                           decay_steps=cosine_decay_steps))
-            new_lr = max(min_learning_rate, new_lr)
+            if linear_cosine_decay_steps is None:
+                new_lr = base_lr * (lr_decay_ratio ** np.sum(self._global_step >= np.array(lr_decay_steps)))
+                new_lr = max(min_learning_rate, new_lr)
+            else:
+                new_lr =\
+                    sess.run(tf.train.linear_cosine_decay(learning_rate=base_lr,
+                                                          global_step=self._global_step,
+                                                          decay_steps=linear_cosine_decay_steps,
+                                                          beta=min_learning_rate))
+
             self.set_lr(sess=sess, lr=new_lr)
 
             start_time = time.time()
@@ -261,7 +266,7 @@ class DCRNNSupervisor(object):
                                       'metric/train_metric',
                                       'loss/val_loss',
                                       'metric/val_metric',
-                                      'learning_rate',
+                                      'learning_rate/learning_rate',
                                       ],
                                      [train_loss,
                                       train_metric,
