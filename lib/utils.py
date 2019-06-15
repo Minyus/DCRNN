@@ -133,7 +133,7 @@ class DotDict(dict):
 
 def read_yaml(config_file):
     with open(config_file) as f:
-        config = yaml.load(f, Loader=yaml.FullLoader)
+        config = yaml.load(f)
     args = DotDict({})
     args.update(config)
     args.paths['config_filepath'] = config_file
