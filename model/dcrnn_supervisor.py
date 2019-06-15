@@ -30,12 +30,13 @@ class DCRNNSupervisor(object):
             if kwargs.get('tf_config') else False
         self._trace = kwargs.get('tf_config').get('trace', False) \
             if kwargs.get('tf_config') else False
+        self._save_graph = kwargs.get('tf_config').get('save_graph', False) \
+            if kwargs.get('tf_config') else False
 
-        # logging.
         self._log_dir = self._get_log_dir(kwargs)
-        # log_level = self._kwargs.get('log_level', 'INFO')
-        # self._logger = utils.get_logger(self._log_dir, __name__, level=log_level)
-        self._writer = tf.summary.FileWriter(self._log_dir)
+
+        self._writer = tf.summary.FileWriter(self._log_dir, sess.graph) \
+            if self._save_graph else tf.summary.FileWriter(self._log_dir)
 
         # Data preparation
         self._data = dataloaders
