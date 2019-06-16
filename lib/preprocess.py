@@ -508,12 +508,10 @@ def transform_to_long(pred_df=None):
 
 
 def save_pred_long_df(args, long_df):
-    # logger = utils.get_logger(args.paths['model_dir'], __name__, level=args.get('log_level', 'INFO'))
-
     long_filename = args.paths['pred_long_filename']
     model_filename = args.paths['model_filename']
     long_filename = \
         Path(long_filename).parent / \
         '{}_{}'.format(Path(model_filename).name, Path(long_filename).name)
     long_df.to_csv(long_filename, index=False)
-    logger.info('The final prediction output file was saved at: {}'.format(long_filename))
+    print('The final prediction output file was saved at: {}'.format(long_filename))

@@ -95,6 +95,11 @@ def calculate_scaled_laplacian(adj_mx, lambda_max=2, undirected=True):
     return L.astype(np.float32)
 
 
+def calculate_identity(adj_mx):
+    I = sp.identity(adj_mx.shape[0], format='csr', dtype=np.float32)
+    return I
+
+
 def get_total_trainable_parameter_size():
     """
     Calculates the total number of trainable parameters in the current graph.

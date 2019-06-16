@@ -48,13 +48,19 @@ class DCGRUCell(RNNCell):
         supports = []
         if filter_type == "laplacian":
             supports.append(utils.calculate_scaled_laplacian(adj_mx, lambda_max=None))
+        elif filter_type == "laplacian_lambda_max_2":
+            supports.append(utils.calculate_scaled_laplacian(adj_mx, lambda_max=2))
+        elif filter_type == "laplacian_lambda_max_1":
+            supports.append(utils.calculate_scaled_laplacian(adj_mx, lambda_max=1))
         elif filter_type == "random_walk":
             supports.append(utils.calculate_random_walk_matrix(adj_mx).T)
         elif filter_type == "dual_random_walk":
             supports.append(utils.calculate_random_walk_matrix(adj_mx).T)
             supports.append(utils.calculate_random_walk_matrix(adj_mx.T).T)
+        elif filter_type == "ignore_spatial_dependency":
+            supports.append(utils.calculate_identity(adj_mx))
         else:
-            supports.append(utils.calculate_scaled_laplacian(adj_mx))
+            raise ValueError("Invalid filter_type: {}".format(filter_type))
         for support in supports:
             self._supports.append(self._build_sparse_matrix(support))
 

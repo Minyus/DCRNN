@@ -40,7 +40,7 @@ model:
   output_activation: 
   cl_decay_steps: 2000
   exclude_zeros_in_metric: true
-  filter_type: dual_random_walk
+  filter_type: laplacian
   horizon: 5
   l1_decay: 0
   max_diffusion_step: 2
