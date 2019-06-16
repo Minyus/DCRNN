@@ -22,6 +22,7 @@ class DCRNNModel(object):
         cl_decay_steps = int(model_kwargs.get('cl_decay_steps', 1000))
         filter_type = model_kwargs.get('filter_type', 'laplacian')
         steps_to_ignore_spatial_dependency = model_kwargs.get('steps_to_ignore_spatial_dependency', 0)
+        proximity_threshold = model_kwargs.get('proximity_threshold', 0.1)
         activation_dict = {'tanh': tf.nn.tanh, 'sigmoid': tf.nn.sigmoid, 'relu': tf.nn.relu}
         activation = activation_dict.get(model_kwargs.get('activation', 'tanh'))
         output_activation = activation_dict.get(model_kwargs.get('output_activation', None))
@@ -45,12 +46,14 @@ class DCRNNModel(object):
 
         cell = DCGRUCell(rnn_units, adj_mx, max_diffusion_step=max_diffusion_step, num_nodes=num_nodes,
                          filter_type=filter_type, activation=activation,
-                         steps_to_ignore_spatial_dependency=steps_to_ignore_spatial_dependency)
+                         steps_to_ignore_spatial_dependency=steps_to_ignore_spatial_dependency,
+                         proximity_threshold=proximity_threshold)
         cell_with_projection = \
             DCGRUCell(rnn_units, adj_mx, max_diffusion_step=max_diffusion_step, num_nodes=num_nodes,
                       num_proj=output_dim, filter_type=filter_type, activation=activation,
                       output_activation=output_activation,
-                      steps_to_ignore_spatial_dependency=steps_to_ignore_spatial_dependency)
+                      steps_to_ignore_spatial_dependency=steps_to_ignore_spatial_dependency,
+                      proximity_threshold=proximity_threshold)
         encoding_cells = [cell] * num_rnn_layers
         decoding_cells = [cell] * (num_rnn_layers - 1) + [cell_with_projection]
         encoding_cells = tf.contrib.rnn.MultiRNNCell(encoding_cells, state_is_tuple=True)

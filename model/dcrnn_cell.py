@@ -22,7 +22,7 @@ class DCGRUCell(RNNCell):
 
     def __init__(self, num_units, adj_mx, max_diffusion_step, num_nodes, num_proj=None,
                  activation=tf.nn.tanh, reuse=None, filter_type="laplacian", use_gc_for_ru=True,
-                 output_activation=None, steps_to_ignore_spatial_dependency=0):
+                 output_activation=None, steps_to_ignore_spatial_dependency=0, proximity_threshold=0.1):
         """
 
         :param num_units:
@@ -50,8 +50,6 @@ class DCGRUCell(RNNCell):
         self._supports = []
         supports = []
 
-        proximity_threshold = args.get('model').get('proximity_threshold', 0.1) \
-            if args.get('model') else 0.1
         adj_mx[adj_mx < proximity_threshold] = 0
         if filter_type == "laplacian":
             supports.append(utils.calculate_scaled_laplacian(adj_mx, lambda_max=None))
