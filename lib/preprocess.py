@@ -75,7 +75,7 @@ def get_spatiotemporal_df(s_df, args, node_ids=None):
     return st_df
 
 
-def get_adjacency_matrix(distance_df, node_ids, proximity_threshold=0.1):
+def get_adjacency_matrix(distance_df, node_ids):
     """
 
     :param distance_df: data frame with three columns: [from, to, distance].
@@ -101,11 +101,7 @@ def get_adjacency_matrix(distance_df, node_ids, proximity_threshold=0.1):
     distances = dist_mx[~np.isinf(dist_mx)].flatten()
     std = distances.std()
     adj_mx = np.exp(-np.square(dist_mx / std))
-    # Make the adjacent matrix symmetric by taking the max.
-    # adj_mx = np.maximum.reduce([adj_mx, adj_mx.T])
 
-    # Sets entries that lower than a threshold, i.e., k, to zero for sparsity.
-    adj_mx[adj_mx < proximity_threshold] = 0
     return node_ids, node_id_to_ind, adj_mx
 
 
@@ -117,9 +113,7 @@ def get_adj_mat(args, geo_df, node_ids):
         if distances_filename is not None:
             dist_df.to_csv(distances_filename, index=False)
 
-        proximity_threshold = args.get('model').get('proximity_threshold', 0.1)\
-            if args.get('model') else 0.1
-        _, _, adj_mx = get_adjacency_matrix(dist_df, node_ids, proximity_threshold=proximity_threshold)
+        _, _, adj_mx = get_adjacency_matrix(dist_df, node_ids)
 
         adj_mat_filename = args.paths.get('adj_mat_filename')
         if adj_mat_filename is not None:
@@ -300,6 +294,19 @@ def aggregate_keeping_rows(df, agg_samples):
     return agg_df
 
 
+def read_st_df(args):
+    traffic_df_path = Path(args.paths['traffic_df_filename'])
+    if traffic_df_path.suffix in ['.h5', '.hdf5']:
+        df = pd.read_hdf(args.paths['traffic_df_filename'])
+        df.index.name = 'timestamp'
+        if not traffic_df_path.with_suffix('.csv').exists():
+            df.to_csv(traffic_df_path.with_suffix('.csv').__str__(), sep=',')
+    else:
+        sep = ',' if traffic_df_path.suffix in ['.csv'] else ' '
+        df = pd.read_csv(args.paths['traffic_df_filename'], index_col=0, parse_dates=[0], sep=sep)
+    return df
+
+
 def generate_train_val_test(args, df=None):
     logger = args.logger
 
@@ -317,17 +324,6 @@ def generate_train_val_test(args, df=None):
         args.model['seq_len'] = get_seq_len(seq_len)
     else:
         seq_len = args.model['seq_len']
-
-    if df is None:
-        traffic_df_path = Path(args.paths['traffic_df_filename'])
-        if traffic_df_path.suffix in ['.h5', '.hdf5']:
-            df = pd.read_hdf(args.paths['traffic_df_filename'])
-            df.index.name = 'timestamp'
-            if not traffic_df_path.with_suffix('.csv').exists():
-                df.to_csv(traffic_df_path.with_suffix('.csv').__str__(), sep=',')
-        else:
-            sep = ',' if traffic_df_path.suffix in ['.csv'] else ' '
-            df = pd.read_csv(args.paths['traffic_df_filename'], index_col=0, parse_dates=[0], sep=sep)
 
     args.datetime_start = df.index.values[0]
     args.datetime_latest = get_datetime_latest(args, df)
@@ -419,6 +415,17 @@ def generate_train_val_test(args, df=None):
     return args, dataloaders
 
 
+def read_adj(args):
+    adj_mat_filename = args.paths['adj_mat_filename']
+    if Path(adj_mat_filename).suffix in ['.pkl']:
+        sensor_ids, sensor_id_to_ind, adj_mx = load_graph_data(adj_mat_filename)
+    elif Path(adj_mat_filename).suffix in ['.csv']:
+        adj_mx = np.loadtxt(adj_mat_filename, dtype=np.float32, delimiter=',')
+    else:
+        adj_mx = np.loadtxt(adj_mat_filename, dtype=np.float32, delimiter=' ')
+    return adj_mx
+
+
 def preprocess(args, show=True):
     for path_str in args.paths.values():
         parent_str = Path(path_str).parent.__str__() \
@@ -440,8 +447,10 @@ def preprocess(args, show=True):
 
     need_st_flag = not Path(args.paths['traffic_df_filename']).exists()
     need_geo_flag = not Path(args.paths['geohash6_filename']).exists()
+    need_adj_flag = not Path(args.paths['adj_mat_filename']).exists()
+    need_comp_flag = need_st_flag or need_geo_flag or need_adj_flag
 
-    if need_st_flag or need_geo_flag:
+    if need_comp_flag:
         source_table_dir = Path(args.paths.get('source_table_dir'))
         if not source_table_dir.exists():
             raise FileNotFoundError('Directory not found: ' + args.paths.get('source_table_dir'))
@@ -454,27 +463,25 @@ def preprocess(args, show=True):
         logger.info('Reading: {}'.format(source_table_filename))
         s_df = pd.read_csv(source_table_filename)
 
-    if need_geo_flag:
         logger.info('Preparing geohash dataframe...')
         ##%% Prepare for adjacency matrix
         geo_df = get_geo_df(s_df)
         geo_df.to_csv(args.paths['geohash6_filename'], index=False)
         node_ids = geo_df['geohash6'].values
-    else:
-        geo_df = pd.read_csv(args.paths.get('geohash6_filename'), index_col=False)
-        node_ids = geo_df['geohash6'].values
 
-    st_df = None
-    if need_st_flag:
         logger.info('Preparing spatio-temporal dataframe...')
         # Get Spatio-temporal df
         st_df = get_spatiotemporal_df(s_df, args, node_ids)
         st_df.to_csv(args.paths['traffic_df_filename'])
         logger.info('Spatio-temporal dataframe was saved at: {}'.format(args.paths['traffic_df_filename']))
+        adj_mx = get_adj_mat(args, geo_df, node_ids)
+    else:
+        geo_df = pd.read_csv(args.paths.get('geohash6_filename'), index_col=False)
+        node_ids = geo_df['geohash6'].values
+        st_df = read_st_df(args)
+        adj_mx = read_adj(args)
 
     args, dataloaders = generate_train_val_test(args, st_df)
-
-    adj_mx = get_adj_mat(args, geo_df, node_ids)
 
     logger.info('Completed preprocessing.')
     logger.info('Arguments after preprocessing: \n' + pformat(args))

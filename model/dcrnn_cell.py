@@ -49,6 +49,10 @@ class DCGRUCell(RNNCell):
         self.id_mx = utils.calculate_identity(adj_mx)
         self._supports = []
         supports = []
+
+        proximity_threshold = args.get('model').get('proximity_threshold', 0.1) \
+            if args.get('model') else 0.1
+        adj_mx[adj_mx < proximity_threshold] = 0
         if filter_type == "laplacian":
             supports.append(utils.calculate_scaled_laplacian(adj_mx, lambda_max=None))
         elif filter_type == "laplacian_lambda_max_2":
