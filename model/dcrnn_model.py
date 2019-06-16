@@ -21,6 +21,7 @@ class DCRNNModel(object):
         max_diffusion_step = int(model_kwargs.get('max_diffusion_step', 2))
         cl_decay_steps = int(model_kwargs.get('cl_decay_steps', 1000))
         filter_type = model_kwargs.get('filter_type', 'laplacian')
+        steps_to_ignore_spatial_dependency = model_kwargs.get('steps_to_ignore_spatial_dependency', 0)
         activation_dict = {'tanh': tf.nn.tanh, 'sigmoid': tf.nn.sigmoid, 'relu': tf.nn.relu}
         activation = activation_dict.get(model_kwargs.get('activation', 'tanh'))
         output_activation = activation_dict.get(model_kwargs.get('output_activation', None))
@@ -43,11 +44,13 @@ class DCRNNModel(object):
         GO_SYMBOL = tf.zeros(shape=(batch_size, num_nodes * output_dim))
 
         cell = DCGRUCell(rnn_units, adj_mx, max_diffusion_step=max_diffusion_step, num_nodes=num_nodes,
-                         filter_type=filter_type, activation=activation)
+                         filter_type=filter_type, activation=activation,
+                         steps_to_ignore_spatial_dependency=steps_to_ignore_spatial_dependency)
         cell_with_projection = \
             DCGRUCell(rnn_units, adj_mx, max_diffusion_step=max_diffusion_step, num_nodes=num_nodes,
                       num_proj=output_dim, filter_type=filter_type, activation=activation,
-                      output_activation=output_activation)
+                      output_activation=output_activation,
+                      steps_to_ignore_spatial_dependency=steps_to_ignore_spatial_dependency)
         encoding_cells = [cell] * num_rnn_layers
         decoding_cells = [cell] * (num_rnn_layers - 1) + [cell_with_projection]
         encoding_cells = tf.contrib.rnn.MultiRNNCell(encoding_cells, state_is_tuple=True)

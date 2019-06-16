@@ -22,7 +22,7 @@ class DCGRUCell(RNNCell):
 
     def __init__(self, num_units, adj_mx, max_diffusion_step, num_nodes, num_proj=None,
                  activation=tf.nn.tanh, reuse=None, filter_type="laplacian", use_gc_for_ru=True,
-                 output_activation=None):
+                 output_activation=None, steps_to_ignore_spatial_dependency=0):
         """
 
         :param num_units:
@@ -43,8 +43,11 @@ class DCGRUCell(RNNCell):
         self._num_proj = num_proj
         self._num_units = num_units
         self._max_diffusion_step = max_diffusion_step
-        self._supports = []
         self._use_gc_for_ru = use_gc_for_ru
+        self._steps_to_ignore_spatial_dependency = steps_to_ignore_spatial_dependency
+
+        self.id_mx = utils.calculate_identity(adj_mx)
+        self._supports = []
         supports = []
         if filter_type == "laplacian":
             supports.append(utils.calculate_scaled_laplacian(adj_mx, lambda_max=None))
@@ -58,11 +61,13 @@ class DCGRUCell(RNNCell):
             supports.append(utils.calculate_random_walk_matrix(adj_mx).T)
             supports.append(utils.calculate_random_walk_matrix(adj_mx.T).T)
         elif filter_type == "ignore_spatial_dependency":
-            supports.append(utils.calculate_identity(adj_mx))
+            supports.append(self.id_mx)
         else:
             raise ValueError("Invalid filter_type: {}".format(filter_type))
         for support in supports:
             self._supports.append(self._build_sparse_matrix(support))
+
+        # self._id_supports = [self._build_sparse_matrix(id_mx) for _ in supports]
 
     @staticmethod
     def _build_sparse_matrix(L):
@@ -150,6 +155,11 @@ class DCGRUCell(RNNCell):
         :param scope:
         :return:
         """
+
+        # supports = self._supports
+        #     if tf.train.get_or_create_global_step() >= self._steps_to_ignore_spatial_dependency \
+        #     else self._build_sparse_matrix(self.id_mx)
+
         # Reshape input and state to (batch_size, num_nodes, input_dim/state_dim)
         batch_size = inputs.get_shape()[0].value
         inputs = tf.reshape(inputs, (batch_size, self._num_nodes, -1))
@@ -169,6 +179,9 @@ class DCGRUCell(RNNCell):
                 pass
             else:
                 for support in self._supports:
+                    support = support \
+                        if tf.train.get_or_create_global_step() >= self._steps_to_ignore_spatial_dependency\
+                        else self._build_sparse_matrix(self.id_mx)
                     x1 = tf.sparse_tensor_dense_matmul(support, x0)
                     x = self._concat(x, x1)
 

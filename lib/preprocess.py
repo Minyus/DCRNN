@@ -75,18 +75,18 @@ def get_spatiotemporal_df(s_df, args, node_ids=None):
     return st_df
 
 
-def get_adjacency_matrix(distance_df, node_ids, normalized_k=0.1):
+def get_adjacency_matrix(distance_df, node_ids, proximity_threshold=0.1):
     """
 
     :param distance_df: data frame with three columns: [from, to, distance].
     :param node_ids: list of node ids.
-    :param normalized_k: entries that become lower than normalized_k after normalization are set to zero for sparsity.
+    :param proximity_threshold: entries that become lower than normalized_k after normalization are set to zero for sparsity.
     :return:
     """
     num_nodes = len(node_ids)
     dist_mx = np.zeros((num_nodes, num_nodes), dtype=np.float32)
     dist_mx[:] = np.inf
-    # Builds sensor id to index map.
+    # Builds node id to index map.
     node_id_to_ind = {}
     for i, node_id in enumerate(node_ids):
         node_id_to_ind[node_id] = i
@@ -105,19 +105,27 @@ def get_adjacency_matrix(distance_df, node_ids, normalized_k=0.1):
     # adj_mx = np.maximum.reduce([adj_mx, adj_mx.T])
 
     # Sets entries that lower than a threshold, i.e., k, to zero for sparsity.
-    adj_mx[adj_mx < normalized_k] = 0
+    adj_mx[adj_mx < proximity_threshold] = 0
     return node_ids, node_id_to_ind, adj_mx
 
 
-def get_adj_mat(args, adj_mx=None):
-    if adj_mx is None:
-        adj_mat_filename = args.paths['adj_mat_filename']
-        if Path(adj_mat_filename).suffix in ['.pkl']:
-            sensor_ids, sensor_id_to_ind, adj_mx = load_graph_data(adj_mat_filename)
-        elif Path(adj_mat_filename).suffix in ['.csv']:
-            adj_mx = np.loadtxt(adj_mat_filename, dtype=np.float32, delimiter=',')
-        else:
-            adj_mx = np.loadtxt(adj_mat_filename, dtype=np.float32, delimiter=' ')
+def get_adj_mat(args, geo_df, node_ids):
+    if geo_df is not None:
+        dist_df = get_dist_df(geo_df)
+
+        distances_filename = args.paths.get('distances_filename')
+        if distances_filename is not None:
+            dist_df.to_csv(distances_filename, index=False)
+
+        proximity_threshold = args.get('model').get('proximity_threshold', 0.1)\
+            if args.get('model') else 0.1
+        _, _, adj_mx = get_adjacency_matrix(dist_df, node_ids, proximity_threshold=proximity_threshold)
+
+        adj_mat_filename = args.paths.get('adj_mat_filename')
+        if adj_mat_filename is not None:
+            np.savetxt(adj_mat_filename, adj_mx, delimiter=',')
+            print('Adjacency matrix was saved at: {}'.format(adj_mat_filename))
+
     return adj_mx
 
 
@@ -431,10 +439,9 @@ def preprocess(args, show=True):
     args.timestep_size_freq = '{}min'.format(args.timestep_size_in_min)
 
     need_st_flag = not Path(args.paths['traffic_df_filename']).exists()
-    need_adj_flag = (not Path(args.paths['adj_mat_filename']).exists()) or \
-                    (not Path(args.paths['geohash6_filename']).exists())
+    need_geo_flag = not Path(args.paths['geohash6_filename']).exists()
 
-    if need_st_flag or need_adj_flag:
+    if need_st_flag or need_geo_flag:
         source_table_dir = Path(args.paths.get('source_table_dir'))
         if not source_table_dir.exists():
             raise FileNotFoundError('Directory not found: ' + args.paths.get('source_table_dir'))
@@ -447,36 +454,15 @@ def preprocess(args, show=True):
         logger.info('Reading: {}'.format(source_table_filename))
         s_df = pd.read_csv(source_table_filename)
 
-    adj_mx = None
-    if need_adj_flag:
-        logger.info('Preparing adjacency matrix...')
+    if need_geo_flag:
+        logger.info('Preparing geohash dataframe...')
         ##%% Prepare for adjacency matrix
         geo_df = get_geo_df(s_df)
+        geo_df.to_csv(args.paths['geohash6_filename'], index=False)
         node_ids = geo_df['geohash6'].values
-        with open(args.paths['geohash6_filename'], 'w') as f:
-            f.write(','.join(node_ids))
-        dist_df = get_dist_df(geo_df)
-        dist_df.to_csv(args.paths.get('distances_filename'), index=False)
-
-        # with open(args.paths.get('geohash6_filename')) as f:
-        #     node_ids = f.read().strip().split(',')
-
-        # distance_df = pd.read_csv(args.distances_filename, dtype={'from': 'str', 'to': 'str'})
-        distance_df = dist_df
-
-        _, sensor_id_to_ind, adj_mx = get_adjacency_matrix(distance_df, node_ids)
-
-        # Save to pickle file.
-        # with open(args.output_pkl_filename, 'wb') as f:
-        #     pickle.dump([node_ids, sensor_id_to_ind, adj_mx], f, protocol=2)
-
-        np.savetxt(args.paths['adj_mat_filename'], adj_mx, delimiter=',')
-        logger.info('Adjacency matrix was saved at: {}'.format(args.paths['adj_mat_filename']))
-
     else:
-        node_ids_df = pd.read_csv(args.paths.get('geohash6_filename'), index_col=None, sep=',')
-        node_ids = node_ids_df.columns
-        adj_mx = get_adj_mat(args, adj_mx)
+        geo_df = pd.read_csv(args.paths.get('geohash6_filename'), index_col=False)
+        node_ids = geo_df['geohash6'].values
 
     st_df = None
     if need_st_flag:
@@ -487,6 +473,8 @@ def preprocess(args, show=True):
         logger.info('Spatio-temporal dataframe was saved at: {}'.format(args.paths['traffic_df_filename']))
 
     args, dataloaders = generate_train_val_test(args, st_df)
+
+    adj_mx = get_adj_mat(args, geo_df, node_ids)
 
     logger.info('Completed preprocessing.')
     logger.info('Arguments after preprocessing: \n' + pformat(args))
