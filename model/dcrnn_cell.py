@@ -8,6 +8,9 @@ import tensorflow as tf
 from tensorflow.contrib.rnn import RNNCell
 
 from lib import utils
+from lib.array_utils import percentile_nd
+from lib.tf_utils import thresholded_dense_to_sparse
+from lib.tf_utils import linear_cosine_decay_start_end
 
 
 class DCGRUCell(RNNCell):
@@ -22,7 +25,7 @@ class DCGRUCell(RNNCell):
 
     def __init__(self, num_units, adj_mx, max_diffusion_step, num_nodes, num_proj=None,
                  activation=tf.nn.tanh, reuse=None, filter_type="laplacian", use_gc_for_ru=True,
-                 output_activation=None, steps_to_ignore_spatial_dependency=0, proximity_threshold=0.1):
+                 output_activation=None, proximity_threshold=None):
         """
 
         :param num_units:
@@ -44,13 +47,12 @@ class DCGRUCell(RNNCell):
         self._num_units = num_units
         self._max_diffusion_step = max_diffusion_step
         self._use_gc_for_ru = use_gc_for_ru
-        self._steps_to_ignore_spatial_dependency = steps_to_ignore_spatial_dependency
 
         self.id_mx = utils.calculate_identity(adj_mx)
         self._supports = []
         supports = []
 
-        adj_mx[adj_mx < proximity_threshold] = 0
+        adj_mx[adj_mx < proximity_threshold['end_proximity']] = 0
         if filter_type == "laplacian":
             supports.append(utils.calculate_scaled_laplacian(adj_mx, lambda_max=None))
         elif filter_type == "laplacian_lambda_max_2":
@@ -67,7 +69,11 @@ class DCGRUCell(RNNCell):
         else:
             raise ValueError("Invalid filter_type: {}".format(filter_type))
         for support in supports:
-            self._supports.append(self._build_sparse_matrix(support))
+            # self._supports.append(self._build_sparse_matrix(support))
+            self._supports.append(np.asarray(support.todense()))
+        self.pct_adj_mx = percentile_nd(adj_mx).astype(np.float32)
+
+        self.proximity_threshold = proximity_threshold
 
         # self._id_supports = [self._build_sparse_matrix(id_mx) for _ in supports]
 
@@ -181,9 +187,15 @@ class DCGRUCell(RNNCell):
                 pass
             else:
                 for support in self._supports:
-                    support = support \
-                        if tf.train.get_or_create_global_step() >= self._steps_to_ignore_spatial_dependency\
-                        else self._build_sparse_matrix(self.id_mx)
+
+                    threshold = \
+                        linear_cosine_decay_start_end(start=self.proximity_threshold['start_proximity'],
+                                                      end=self.proximity_threshold['end_proximity'],
+                                                      global_step=tf.train.get_or_create_global_step(),
+                                                      decay_steps=self.proximity_threshold['proximity_decay_steps'],
+                                                      )
+                    support = thresholded_dense_to_sparse(support, self.pct_adj_mx, threshold=threshold)
+
                     x1 = tf.sparse_tensor_dense_matmul(support, x0)
                     x = self._concat(x, x1)
 

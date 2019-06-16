@@ -11,7 +11,7 @@ import time
 from lib import utils, metrics
 from lib.AMSGrad import AMSGrad
 from lib.metrics import masked_mae_loss, masked_rmse_loss, masked_mse_loss
-
+from lib.tf_utils import linear_cosine_decay_start_end
 from model.dcrnn_model import DCRNNModel
 
 
@@ -251,10 +251,10 @@ class DCRNNSupervisor(object):
             else:
                 linear_cosine_decay_steps = float(linear_cosine_decay_steps)
                 new_lr =\
-                    sess.run(tf.train.linear_cosine_decay(learning_rate=base_lr,
+                    sess.run(linear_cosine_decay_start_end(start=base_lr, end=min_learning_rate,
                                                           global_step=self._global_step,
                                                           decay_steps=linear_cosine_decay_steps,
-                                                          beta=min_learning_rate))
+                                                          ))
 
             self.set_lr(sess=sess, lr=new_lr)
 

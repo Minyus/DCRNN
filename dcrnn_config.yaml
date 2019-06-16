@@ -40,9 +40,12 @@ model:
   output_activation: 
   cl_decay_steps: 2000
   exclude_zeros_in_metric: true
-  filter_type: dual_random_walk
-  steps_to_ignore_spatial_dependency: 120
-  proximity_threshold: 0.8
+  filter_type: laplacian
+  
+  proximity_threshold:
+    start_proximity: 0.99
+    end_proximity: 0.9
+    proximity_decay_steps: 150
   horizon: 5
   l1_decay: 0
   max_diffusion_step: 2

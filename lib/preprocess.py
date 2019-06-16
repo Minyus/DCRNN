@@ -114,12 +114,6 @@ def get_adj_mat(args, geo_df, node_ids):
             dist_df.to_csv(distances_filename, index=False)
 
         _, _, adj_mx = get_adjacency_matrix(dist_df, node_ids)
-
-        adj_mat_filename = args.paths.get('adj_mat_filename')
-        if adj_mat_filename is not None:
-            np.savetxt(adj_mat_filename, adj_mx, delimiter=',')
-            print('Adjacency matrix was saved at: {}'.format(adj_mat_filename))
-
     return adj_mx
 
 
@@ -474,7 +468,13 @@ def preprocess(args, show=True):
         st_df = get_spatiotemporal_df(s_df, args, node_ids)
         st_df.to_csv(args.paths['traffic_df_filename'])
         logger.info('Spatio-temporal dataframe was saved at: {}'.format(args.paths['traffic_df_filename']))
+
+        logger.info('Preparing spatio-temporal dataframe...')
         adj_mx = get_adj_mat(args, geo_df, node_ids)
+        adj_mat_filename = args.paths.get('adj_mat_filename')
+        if adj_mat_filename is not None:
+            np.savetxt(adj_mat_filename, adj_mx, delimiter=',')
+            logger.info('Adjacency matrix was saved at: {}'.format(adj_mat_filename))
     else:
         geo_df = pd.read_csv(args.paths.get('geohash6_filename'), index_col=False)
         node_ids = geo_df['geohash6'].values

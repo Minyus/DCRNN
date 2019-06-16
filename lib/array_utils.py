@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.stats import rankdata
 
 
 def every_n_reduce_mean(arr, n=2):
@@ -52,6 +53,13 @@ def broadcast_last_dim(arr1d, num_broadcast):
     arr2d = np.expand_dims(arr1d, -1)
     arr2d = np.tile(arr2d, (1, num_broadcast))
     return arr2d
+
+
+def percentile_nd(a):
+    r_1d = rankdata(a, method='ordinal')
+    r_1d = (r_1d - 1) / r_1d.shape[0]
+    r = r_1d.reshape(a.shape)
+    return r
 
 
 #%%
