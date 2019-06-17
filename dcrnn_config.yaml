@@ -7,7 +7,7 @@ latest_timepoint:
   timestamp_option:
     set_timestamp: false
     timestamp:
-test_only: false
+test_only: true
 paths:
   source_table_dir: grab_data/input/
   geohash6_filename: grab_data/intermediate/geohash6.csv
@@ -24,9 +24,9 @@ data:
   test_samples_per_epoch: 96
   val_samples_per_epoch: 0
   train_samples_per_epoch: 96
-  test_batch_size: 12
-  val_batch_size: 12
-  train_batch_size: 12
+  test_batch_size: 1
+  val_batch_size: 1
+  train_batch_size: 1
   target_train_samples: 44160
   scale: false
   min_output_value: 3.092217238e-09
@@ -40,8 +40,7 @@ model:
   output_activation: 
   cl_decay_steps: 2000
   exclude_zeros_in_metric: true
-  filter_type: laplacian
-  
+  filter_type: dual_random_walk
   proximity_threshold:
     start_proximity: 0.99
     end_proximity: 0.9

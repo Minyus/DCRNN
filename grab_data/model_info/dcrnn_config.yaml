@@ -1,0 +1,89 @@
+latest_timepoint:
+  day_hour_min_option:
+    set_day_hour_min: true
+    day: 61
+    hour: 22
+    min: 30
+  timestamp_option:
+    set_timestamp: false
+    timestamp:
+test_only: true
+paths:
+  source_table_dir: grab_data/input/
+  geohash6_filename: grab_data/intermediate/geohash6.csv
+  distances_filename: grab_data/intermediate/distances.csv
+  traffic_df_filename: grab_data/intermediate/spatiotemporal_df.csv
+  adj_mat_filename: grab_data/intermediate/adj_mat.csv
+  model_dir: grab_data/model_info
+  output_filename: grab_data/intermediate/dcrnn_predictions.npz
+  pred_arr2d_filename: grab_data/intermediate/dcrnn_pred_arr2d.csv
+  pred_df_filename: grab_data/intermediate/dcrnn_pred_df.csv
+  pred_long_filename: grab_data/output/output.csv
+timestep_size_in_min: 15
+data:
+  test_samples_per_epoch: 96
+  val_samples_per_epoch: 0
+  train_samples_per_epoch: 96
+  test_batch_size: 1
+  val_batch_size: 1
+  train_batch_size: 1
+  target_train_samples: 44160
+  scale: false
+  min_output_value: 3.092217238e-09
+  max_output_value: 1.0
+supplemental_features:
+  add_time_in_day: false
+  add_day_of_week: false
+  add_hist_dow_hour_mean: false
+model:
+  activation: tanh
+  output_activation: 
+  cl_decay_steps: 2000
+  exclude_zeros_in_metric: true
+  filter_type: dual_random_walk
+  proximity_threshold:
+    start_proximity: 0.99
+    end_proximity: 0.9
+    proximity_decay_steps: 150
+  horizon: 5
+  l1_decay: 0
+  max_diffusion_step: 2
+  num_rnn_layers: 2
+  rnn_units: 64
+  seq_len:
+  seq_reducing:
+    enable_seq_reducing: true
+    seq_len_list:
+    - 8
+    - 96
+    - 672
+    - 568
+  use_curriculum_learning: true
+train:
+  min_learning_rate: 2.0e-06
+  base_lr: 0.01
+  lr_decay_ratio: 0.1
+  lr_decay_steps:
+  - 160
+  - 240
+  - 320
+  - 400
+  linear_cosine_decay_steps: 300
+  epsilon: 0.001
+  max_grad_norm: 5
+  max_to_keep: 100
+  
+  optimizer: adam
+  patience: 50
+
+  test_every_n_epochs: 1
+  loss_func: rmse
+  metric_func: rmse
+log_level: INFO
+tf_config:
+  use_cpu_only: false
+  allow_gpu_memory_growth: false
+  jit_compilation: false
+  save_graph: false
+  save_tensors: false
+  trace: false
