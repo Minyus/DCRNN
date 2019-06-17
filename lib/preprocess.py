@@ -439,12 +439,10 @@ def preprocess(args, show=True):
 
     args.timestep_size_freq = '{}min'.format(args.timestep_size_in_min)
 
-    need_st_flag = not Path(args.paths['traffic_df_filename']).exists()
     need_geo_flag = not Path(args.paths['geohash6_filename']).exists()
     need_adj_flag = not Path(args.paths['adj_mat_filename']).exists()
-    need_comp_flag = need_st_flag or need_geo_flag or need_adj_flag
 
-    if need_comp_flag:
+    if need_geo_flag or need_adj_flag:
         source_table_dir = Path(args.paths.get('source_table_dir'))
         if not source_table_dir.exists():
             raise FileNotFoundError('Directory not found: ' + args.paths.get('source_table_dir'))
@@ -462,14 +460,9 @@ def preprocess(args, show=True):
         geo_df = get_geo_df(s_df)
         geo_df.to_csv(args.paths['geohash6_filename'], index=False)
         node_ids = geo_df['geohash6'].values
+        logger.info('Geohash dataframe was saved at: {}'.format(args.paths['geohash6_filename']))
 
-        logger.info('Preparing spatio-temporal dataframe...')
-        # Get Spatio-temporal df
-        st_df = get_spatiotemporal_df(s_df, args, node_ids)
-        st_df.to_csv(args.paths['traffic_df_filename'])
-        logger.info('Spatio-temporal dataframe was saved at: {}'.format(args.paths['traffic_df_filename']))
-
-        logger.info('Preparing spatio-temporal dataframe...')
+        logger.info('Preparing Adjacency matrix...')
         adj_mx = get_adj_mat(args, geo_df, node_ids)
         adj_mat_filename = args.paths.get('adj_mat_filename')
         if adj_mat_filename is not None:
@@ -478,9 +471,17 @@ def preprocess(args, show=True):
     else:
         geo_df = pd.read_csv(args.paths.get('geohash6_filename'), index_col=False)
         node_ids = geo_df['geohash6'].values
-        st_df = read_st_df(args)
         adj_mx = read_adj(args)
 
+    need_st_flag = not Path(args.paths['traffic_df_filename']).exists()
+    if need_st_flag:
+        logger.info('Preparing spatio-temporal dataframe...')
+        # Get Spatio-temporal df
+        st_df = get_spatiotemporal_df(s_df, args, node_ids)
+        st_df.to_csv(args.paths['traffic_df_filename'])
+        logger.info('Spatio-temporal dataframe was saved at: {}'.format(args.paths['traffic_df_filename']))
+    else:
+        st_df = read_st_df(args)
     args, dataloaders = generate_train_val_test(args, st_df)
 
     logger.info('Completed preprocessing.')
