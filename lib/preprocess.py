@@ -127,6 +127,7 @@ def setup_dataloader(arr3d,
                      scale,
                      features,
                      logger,
+                     seq_sampling,
                      ):
 
     train_length = length_dict['train_length']
@@ -154,15 +155,15 @@ def setup_dataloader(arr3d,
     dataloaders = {}
     dataloaders['test_loader'] = \
         SpatioTemporalDataLoader(test_z_arr3d, test_batch_size, seq_len, horizon, shuffle=False,
-                                 features=features)
+                                 features=features, seq_sampling=seq_sampling)
     assert dataloaders['test_loader'].num_batch > 0, 'num_batch for test dataset should be > 0'
 
     dataloaders['val_loader'] = \
         SpatioTemporalDataLoader(val_z_arr3d, val_batch_size, seq_len, horizon, shuffle=False,
-                                 features=features)
+                                 features=features, seq_sampling=seq_sampling)
     dataloaders['train_loader'] = \
         SpatioTemporalDataLoader(train_z_arr3d, train_batch_size, seq_len, horizon, shuffle=True,
-                                 features=features)
+                                 features=features, seq_sampling=seq_sampling)
 
     dataloaders['scaler'] = scaler
     logger.info('[train]      | # timesteps: {:06d} | # samples: {:06d} | # batches: {:06d}'.\
@@ -181,7 +182,8 @@ class SpatioTemporalDataLoader(object):
                  horizon,
                  shuffle=False,
                  pad_with_last_sample=False,
-                 features=None):
+                 features=None,
+                 seq_sampling=True):
 
         self.seq_len = seq_len
         self.horizon = horizon
@@ -207,6 +209,7 @@ class SpatioTemporalDataLoader(object):
 
         self.shuffle = shuffle
         self.arr3d = arr3d
+        self.seq_sampling = seq_sampling
 
     def get_iterator(self):
         self.current_ind = 0
@@ -231,10 +234,24 @@ class SpatioTemporalDataLoader(object):
                     i = sample_index_list.pop()
 
                     hist_i = i + seq_len
-                    x_arr3d = ex_partitioned_reduce_mean(self.arr3d, i,
-                                                         part_size_list=self.seq_len) \
-                        if enable_seq_reducing \
-                        else self.arr3d[i:hist_i]
+                    if self.seq_sampling:
+
+                        slots_per_block = 12 # TODO: add to the arguments.
+                        slots_per_week = 7 * 24 * 60 // 15 # TODO: compute based on the arguments
+
+                        x_arr3d = self.arr3d[i:(i+slots_per_week*2)]
+                        x_arr3d = np.concatenate([
+                            x_arr3d[:slots_per_block],
+                            x_arr3d[(slots_per_week-slots_per_block):(slots_per_week)],
+                            x_arr3d[(slots_per_week):(slots_per_week+slots_per_block)],
+                            x_arr3d[(-slots_per_block):],
+                            ])
+                    else:
+                        hist_i = i + seq_len
+                        x_arr3d = ex_partitioned_reduce_mean(self.arr3d, i,
+                                                             part_size_list=self.seq_len) \
+                            if enable_seq_reducing \
+                            else self.arr3d[i:hist_i]
                     if self.features.get('add_time_in_day'):
                         # extract the fractional part (time) to remove the integer part (day)
                         x_arr3d[..., 1] = x_arr3d[..., 1] % 1
@@ -312,12 +329,18 @@ def generate_train_val_test(args, df=None):
     args.data['target_train_steps'] = \
         args.data['target_train_samples'] // args.data['train_batch_size']
 
-    if args.model.get('seq_reducing') and \
-            args.model.get('seq_reducing').get('enable_seq_reducing'):
-        seq_len = args.model.get('seq_reducing').get('seq_len_list')
-        args.model['seq_len'] = get_seq_len(seq_len)
+    if args.model.get('seq_sampling'):
+        slots_per_block = 12  # TODO: add to the arguments.
+        slots_per_week = 7 * 24 * 60 // 15  # TODO: compute based on the arguments
+        seq_len = slots_per_week * 2
+        args.model['seq_len'] = 4 * slots_per_block
     else:
-        seq_len = args.model['seq_len']
+        if args.model.get('seq_reducing') and \
+                args.model.get('seq_reducing').get('enable_seq_reducing'):
+            seq_len = args.model.get('seq_reducing').get('seq_len_list')
+            args.model['seq_len'] = get_seq_len(seq_len)
+        else:
+            seq_len = args.model['seq_len']
 
     args.datetime_start = df.index.values[0]
     args.datetime_latest = get_datetime_latest(args, df)
@@ -400,6 +423,7 @@ def generate_train_val_test(args, df=None):
         scale=args.data['scale'],
         features=features,
         logger=logger,
+        seq_sampling=args.model.get('seq_sampling')
         )
 
     args.data['train_steps_per_epoch'] = \
