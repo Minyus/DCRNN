@@ -52,7 +52,11 @@ class DCGRUCell(RNNCell):
         self._supports = []
         supports = []
 
-        adj_mx[adj_mx < proximity_threshold['end_proximity']] = 0
+        adj_mx[adj_mx < proximity_threshold] = 0
+        # adj_mx[adj_mx < proximity_threshold['end_proximity']] = 0
+        # self.proximity_threshold = proximity_threshold
+        # self.pct_adj_mx = percentile_nd(adj_mx).astype(np.float32)
+
         if filter_type == "laplacian":
             supports.append(utils.calculate_scaled_laplacian(adj_mx, lambda_max=None))
         elif filter_type == "laplacian_lambda_max_2":
@@ -69,13 +73,20 @@ class DCGRUCell(RNNCell):
         else:
             raise ValueError("Invalid filter_type: {}".format(filter_type))
         for support in supports:
-            # self._supports.append(self._build_sparse_matrix(support))
-            self._supports.append(np.asarray(support.todense()))
-        self.pct_adj_mx = percentile_nd(adj_mx).astype(np.float32)
 
-        self.proximity_threshold = proximity_threshold
+            # support = np.asarray(support.todense())
+            # threshold = \
+            #     linear_cosine_decay_start_end(start=self.proximity_threshold['start_proximity'],
+            #                                   end=self.proximity_threshold['end_proximity'],
+            #                                   global_step=tf.train.get_or_create_global_step(),
+            #                                   decay_steps=self.proximity_threshold['proximity_decay_steps'],
+            #                                   )
+            # support = thresholded_dense_to_sparse(support, self.pct_adj_mx, threshold=threshold)
+            #
+            # self._supports.append(support)
 
-        # self._id_supports = [self._build_sparse_matrix(id_mx) for _ in supports]
+            self._supports.append(self._build_sparse_matrix(support))
+
 
     @staticmethod
     def _build_sparse_matrix(L):
@@ -187,14 +198,6 @@ class DCGRUCell(RNNCell):
                 pass
             else:
                 for support in self._supports:
-
-                    threshold = \
-                        linear_cosine_decay_start_end(start=self.proximity_threshold['start_proximity'],
-                                                      end=self.proximity_threshold['end_proximity'],
-                                                      global_step=tf.train.get_or_create_global_step(),
-                                                      decay_steps=self.proximity_threshold['proximity_decay_steps'],
-                                                      )
-                    support = thresholded_dense_to_sparse(support, self.pct_adj_mx, threshold=threshold)
 
                     x1 = tf.sparse_tensor_dense_matmul(support, x0)
                     x = self._concat(x, x1)
