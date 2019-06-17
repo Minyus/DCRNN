@@ -7,8 +7,8 @@ This repository, a fork of [DCRNN](https://github.com/liyaguang/DCRNN), is my re
 ## How to use?
 
 1. Clone this repository.
-2. Place the test CSV file similar to the given `training.csv` in the `input` folder.
-3. Modify the open the `dcrnn_config.yaml` with a text editor such as notepad++ and set the latest_timepoint. 
+2. Place the test CSV file similar to the given `training.csv` in the `input` folder in `grab_data` folder. (`grab_data/input/test.csv`)
+3. Open the `dcrnn_config.yaml` with a text editor such as notepad++ and set the latest_timepoint as follows.
 
 To predict the demand values just after the latest timepoint in the dataset:
 ```
