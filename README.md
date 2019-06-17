@@ -1,95 +1,71 @@
-# Diffusion Convolutional Recurrent Neural Network: Data-Driven Traffic Forecasting
+# Application of Diffusion Convolutional Recurrent Neural Network (DCRNN) on Traffic Management
 
 ![Diffusion Convolutional Recurrent Neural Network](figures/model_architecture.jpg "Model Architecture")
 
-This is a TensorFlow implementation of Diffusion Convolutional Recurrent Neural Network in the following paper: \
-Yaguang Li, Rose Yu, Cyrus Shahabi, Yan Liu, [Diffusion Convolutional Recurrent Neural Network: Data-Driven Traffic Forecasting](https://arxiv.org/abs/1707.01926), ICLR 2018.
+This repository, a fork of [DCRNN](https://github.com/liyaguang/DCRNN), is my response to the challege of [Traffic Management](https://www.aiforsea.com/traffic-management).
+
+## How to use?
+
+1. Clone this repository.
+2. Place the test CSV file similar to the given `training.csv` in the input folder.
+3. Modify the open the `dcrnn_config.yaml` with a text editor such as notepad++ and set the latest_timepoint. 
+
+To predict the demand values just after the latest timepoint in the dataset:
+```
+latest_timepoint:
+  day_hour_min_option:
+    set_day_hour_min: false
+```
+
+To set timepoint "T" to day 61 22:30, for example, to predict demand at 22:45, 23:00, 23:15, 23:30, 23:45.
+```
+latest_timepoint:
+  day_hour_min_option:
+    set_day_hour_min: true
+    day: 61
+    hour: 22
+    min: 30
+```
+
+4. Run `dcrnn_main.py`.
 
 
-## Requirements
-- scipy>=0.19.0
-- numpy>=1.12.1
-- pandas>=0.19.2
-- tensorflow>=1.3.0
-- pyaml
 
+## How to train the model?
+
+Open `dcrnn_config.yaml` and set `test_only` to false. 
+
+
+## Why the methodology was chosen?
+
+The DCRNN methodology use both time-series and spatial dependency (relationship between geohash locations) to forecast future values.
+
+## Change in this fork
+
+- Refactor.
+- Integrate separate modules into a single module.
+- Adapt preprocessing and postprocessing to the data at [Traffic Management](https://www.aiforsea.com/traffic-management). Compute the distances between geohash locations and generate adjacency matrix (1 for itself, 0 for far locations.)
+- Reduced dimension of the feature sequence (named "seq reducing" in the config file). Redue sequence of 14 days or 1344 (14*24*4) slots of 15 minutes to 28 slots of variable duration (8 slots of 15 min, 12 slots of 2 hours, 7 slots of 1 day, and the rest). (The original version used only 12 slots.) 
+- Linear cosine decay of learning rate.
+- Linear cosine decay of proximity threshold to consider only the spatial dependency with the nearest neighbors first, and then increase the neighbors to consider. 
+
+
+## Requirements with tested versions
+- Python>=3.5.3
+- scipy>=1.3.0
+- numpy>=1.16.4
+- pandas>=0.24.2
+- pyyaml>=3.13
+- tensorflow>=1.13.0
+- geopy>=1.20.0
+- python-geohash>=0.8.5
 
 Dependency can be installed using the following command:
 ```bash
 pip install -r requirements.txt
 ```
 
-## Data Preparation
-The traffic data files for Los Angeles (METR-LA) and the Bay Area (PEMS-BAY), i.e., `metr-la.h5` and `pems-bay.h5`, are available at [Google Drive](https://drive.google.com/open?id=10FOTa6HXPqX8Pf5WRoRwcFnW9BrNZEIX) or [Baidu Yun](https://pan.baidu.com/s/14Yy9isAIZYdU__OYEQGa_g), and should be
-put into the `data/` folder.
-The `*.h5` files store the data in `panads.DataFrame` using the `HDF5` file format. Here is an example:
-
-|                     | sensor_0 | sensor_1 | sensor_2 | sensor_n |
-|:-------------------:|:--------:|:--------:|:--------:|:--------:|
-| 2018/01/01 00:00:00 |   60.0   |   65.0   |   70.0   |    ...   |
-| 2018/01/01 00:05:00 |   61.0   |   64.0   |   65.0   |    ...   |
-| 2018/01/01 00:10:00 |   63.0   |   65.0   |   60.0   |    ...   |
-|         ...         |    ...   |    ...   |    ...   |    ...   |
-
-
-Here is an article about [Using HDF5 with Python](https://medium.com/@jerilkuriakose/using-hdf5-with-python-6c5242d08773).
-
-Run the following commands to generate train/test/val dataset at  `data/{METR-LA,PEMS-BAY}/{train,val,test}.npz`.
-```bash
-# Create data directories
-mkdir -p data/{METR-LA,PEMS-BAY}
-
-# METR-LA
-python -m scripts.generate_training_data --output_dir=data/METR-LA --traffic_df_filename=data/metr-la.h5
-
-# PEMS-BAY
-python -m scripts.generate_training_data --output_dir=data/PEMS-BAY --traffic_df_filename=data/pems-bay.h5
-```
-
-## Graph Construction
- As the currently implementation is based on pre-calculated road network distances between sensors, it currently only
- supports sensor ids in Los Angeles (see `data/sensor_graph/sensor_info_201206.csv`).
-```bash
-python -m scripts.gen_adj_mx  --sensor_ids_filename=data/sensor_graph/graph_sensor_ids.txt --normalized_k=0.1\
-    --output_pkl_filename=data/sensor_graph/adj_mx.pkl
-```
-Besides, the locations of sensors in Los Angeles, i.e., METR-LA, are available at [data/sensor_graph/graph_sensor_locations.csv](https://github.com/liyaguang/DCRNN/blob/master/data/sensor_graph/graph_sensor_locations.csv).
-
-## Run the Pre-trained Model on METR-LA
-
-```bash
-# METR-LA
-python run_demo.py --config_filename=data/model/pretrained/METR-LA/config.yaml
-
-# PEMS-BAY
-python run_demo.py --config_filename=data/model/pretrained/PEMS-BAY/config.yaml
-```
-The generated prediction of DCRNN is in `data/results/dcrnn_predictions`.
-
-
-## Model Training
-```bash
-# METR-LA
-python dcrnn_train.py --config_filename=data/model/dcrnn_la.yaml
-
-# PEMS-BAY
-python dcrnn_train.py --config_filename=data/model/dcrnn_bay.yaml
-```
-Each epoch takes about 5min or 10 min on a single GTX 1080 Ti for METR-LA or PEMS-BAY respectively. 
-
-There is a chance that the training loss will explode, the temporary workaround is to restart from the last saved model before the explosion, or to decrease the learning rate earlier in the learning rate schedule. 
-
-
-More details are being added ...
-
-## Citation
-
-If you find this repository, e.g., the code and the datasets, useful in your research, please cite the following paper:
-```
-@inproceedings{li2018dcrnn_traffic,
-  title={Diffusion Convolutional Recurrent Neural Network: Data-Driven Traffic Forecasting},
-  author={Li, Yaguang and Yu, Rose and Shahabi, Cyrus and Liu, Yan},
-  booktitle={International Conference on Learning Representations (ICLR '18)},
-  year={2018}
-}
-```
+## Reference
+DCRNN (https://github.com/liyaguang/DCRNN)\
+Yaguang Li, Rose Yu, Cyrus Shahabi, Yan Liu, [Diffusion Convolutional Recurrent Neural Network: Data-Driven Traffic Forecasting](https://arxiv.org/abs/1707.01926), ICLR 2018.
+Linear Cosine Decay (https://www.tensorflow.org/api_docs/python/tf/train/linear_cosine_decay)
