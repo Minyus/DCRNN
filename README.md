@@ -66,6 +66,6 @@ pip install -r requirements.txt
 ```
 
 ## Reference
-DCRNN (https://github.com/liyaguang/DCRNN)\
-Yaguang Li, Rose Yu, Cyrus Shahabi, Yan Liu, [Diffusion Convolutional Recurrent Neural Network: Data-Driven Traffic Forecasting](https://arxiv.org/abs/1707.01926), ICLR 2018.
-Linear Cosine Decay (https://www.tensorflow.org/api_docs/python/tf/train/linear_cosine_decay)
+- DCRNN (https://github.com/liyaguang/DCRNN)\
+- Yaguang Li, Rose Yu, Cyrus Shahabi, Yan Liu, [Diffusion Convolutional Recurrent Neural Network: Data-Driven Traffic Forecasting](https://arxiv.org/abs/1707.01926), ICLR 2018.
+- Linear Cosine Decay (https://www.tensorflow.org/api_docs/python/tf/train/linear_cosine_decay)
