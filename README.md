@@ -7,7 +7,7 @@ This repository, a fork of [DCRNN](https://github.com/liyaguang/DCRNN), is my re
 ## How to use?
 
 1. Clone this repository.
-2. Place the test CSV file similar to the given `training.csv` in the input folder.
+2. Place the test CSV file similar to the given `training.csv` in the `input` folder.
 3. Modify the open the `dcrnn_config.yaml` with a text editor such as notepad++ and set the latest_timepoint. 
 
 To predict the demand values just after the latest timepoint in the dataset:
@@ -46,8 +46,9 @@ The DCRNN methodology use both time-series and spatial dependency (relationship 
 - Integrate separate modules into a single module.
 - Adapt preprocessing and postprocessing to the data at [Traffic Management](https://www.aiforsea.com/traffic-management). Compute the distances between geohash locations and generate adjacency matrix (1 for itself, 0 for far locations.)
 - Reduced dimension of the feature sequence (named "seq reducing" in the config file). Redue sequence of 14 days or 1344 (14*24*4) slots of 15 minutes to 28 slots of variable duration (8 slots of 15 min, 12 slots of 2 hours, 7 slots of 1 day, and the rest). (The original version used only 12 slots.) 
+- Sample 48 timeslots (4 x 12 slots of 15 mins: 3 hours just before "T", 3+3 hours 1 week prior to before and after "T", and 3 hours 2 weeks ago) from the sequence 
 - Linear cosine decay of learning rate.
-- Linear cosine decay of proximity threshold to consider only the spatial dependency with the nearest neighbors first, and then increase the neighbors to consider. 
+
 
 
 ## Requirements with tested versions
