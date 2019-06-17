@@ -27,7 +27,7 @@ latest_timepoint:
     min: 30
 ```
 
-4. Run `dcrnn_main.py`.
+4. Run `dcrnn_main.py`. The prediction output will be saved at `grab_data/output`.
 
 
 
