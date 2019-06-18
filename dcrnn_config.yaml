@@ -21,11 +21,11 @@ paths:
   pred_long_filename: grab_data/output/output.csv
 timestep_size_in_min: 15
 data:
-  test_samples_per_epoch: 96
+  test_samples_per_epoch: 1
   val_samples_per_epoch: 0
-  train_samples_per_epoch: 96
+  train_samples_per_epoch: 0
   test_batch_size: 1
-  val_batch_size: 12
+  val_batch_size: 1
   train_batch_size: 12
   target_train_samples: 44160
   scale: false

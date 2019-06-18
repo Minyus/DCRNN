@@ -321,7 +321,7 @@ def read_st_df(args):
 def generate_train_val_test(args, df=None):
     logger = args.logger
 
-    assert args.data['train_samples_per_epoch'] >= args.data['train_batch_size']
+    # assert args.data['train_samples_per_epoch'] >= args.data['train_batch_size']
     assert args.data['target_train_samples'] >= args.data['train_samples_per_epoch']
 
     args.data['train_steps_per_epoch'] = \
